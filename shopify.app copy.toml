@@ -1,0 +1,36 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "6237602963257812595f44106bcebcab"
+name = "InvoiceGST: Smart Invoicing"
+application_url = "https://gstpro.viradiyainfotech.com"
+embedded = true
+handle = "invoicegst-smart-gst-invoicing"
+
+[webhooks]
+api_version = "2026-04"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_all_orders,read_content,read_customers,read_draft_orders,read_locations,read_orders,read_product_listings,read_products,write_products"
+
+[auth]
+redirect_urls = [
+  "https://gstpro.viradiyainfotech.com/auth/callback",
+  "https://gstpro.viradiyainfotech.com/auth/shopify/callback",
+  "https://gstpro.viradiyainfotech.com/api/auth/callback"
+]
+
+[pos]
+embedded = false

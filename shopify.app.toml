@@ -1,0 +1,38 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "9449c0bc1ee8a28776f1dbc0b490183a"
+name = "Smart Invoicing test"
+application_url = "https://reflection-gap-runtime-judges.trycloudflare.com"
+embedded = true
+handle = "smartinvoicingtest"
+
+[build]
+automatically_update_urls_on_dev = true
+dev_store_url = "suvasiniwebguru.myshopify.com"
+
+[webhooks]
+api_version = "2025-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/data_request"
+  compliance_topics = [ "customers/data_request" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/customers/redact"
+  compliance_topics = [ "customers/redact" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/shop/redact"
+  compliance_topics = [ "shop/redact" ]
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_all_orders,read_content,read_customers,read_locations,read_orders,read_product_listings,read_products,write_products"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://reflection-gap-runtime-judges.trycloudflare.com/auth/callback",
+  "https://reflection-gap-runtime-judges.trycloudflare.com/auth/shopify/callback",
+  "https://reflection-gap-runtime-judges.trycloudflare.com/api/auth/callback"
+]

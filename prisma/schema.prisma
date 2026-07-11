@@ -1,0 +1,332 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Shopify session storage (required by shopify-app-remix)
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+// Merchant shop settings
+model Shop {
+  id              String   @id @default(cuid())
+  shopDomain      String   @unique
+  gstin           String?
+  businessName    String?
+  address         String?
+  city            String?
+  state           String?
+  stateCode       String?
+  pincode         String?
+  phone           String?
+  email           String?
+  logoUrl         String?
+  signatureUrl    String?
+  invoicePrefix   String   @default("INV")
+  invoiceCounter  Int      @default(1)
+  currentPlan     String   @default("free")
+  ordersThisMonth Int      @default(0)
+  planResetDate   DateTime?
+  onboardingDone  Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  settings              ShopSettings?
+  invoices              Invoice[]
+  emailLogs             EmailLog[]
+  locations             ShopLocation[]
+  reportHistory         ReportHistory[]
+  templateCustomizations TemplateCustomization[]
+}
+
+// Invoice display & email settings
+model ShopSettings {
+  id                  String  @id @default(cuid())
+  shopId              String  @unique
+  templateId          String  @default("template-1")
+  packingSlipTemplateId String @default("default")
+  primaryColor        String  @default("#1a73e8")
+  fontFamily          String  @default("Inter")
+  headerText          String?
+  footerText          String?
+  termsConditions     String?
+  showHsnCode         Boolean @default(true)
+  showDiscount        Boolean @default(true)
+  showBuyerGstin      Boolean @default(true)
+  autoEmailEnabled    Boolean @default(false)
+  emailTrigger        String  @default("fulfilled") // "paid" | "fulfilled" | "manual"
+  emailSubject        String  @default("Your GST Invoice - {invoice_number}")
+  emailBody           String?
+  customFields        String? // JSON string
+
+  // Invoice Number & Formatting
+  invoiceNumberType   String  @default("custom")     // "custom" | "order_number"
+  invoiceSuffix       String?
+  invoiceStartNumber  Int     @default(1)
+  financialYearStart  Int     @default(4)             // 4 = April (Indian FY)
+  currencySymbol      String  @default("₹")
+  dateFormat          String  @default("DD-MM-YYYY")
+
+  // Tax Settings
+  taxAllProducts      Boolean @default(true)
+  zeroTaxOnExports    Boolean @default(true)
+  compareAtPrice        Boolean @default(false)
+  showReturnedItems     Boolean @default(false)
+  useBillingAsShipping  Boolean @default(true)        // true = use billing addr; false = use shipping addr for Ship To
+  taxSplitMethod        String  @default("shipping")  // "shipping" | "billing"
+  shippingGstEnabled  Boolean @default(false)
+  shippingGstRate     Float   @default(18)
+  shippingHsnCode     String  @default("996812")
+  defaultGstRate      Float   @default(18)           // Used when Shopify has no tax_lines
+  useDefaultGstRate   Boolean @default(true)         // When false, products with no Shopify tax_lines get 0% GST
+
+  // E-Invoice (NIC IRP) credentials
+  eInvoiceEnabled     Boolean @default(false)
+  eInvoiceApiUser     String?
+  eInvoiceApiPass     String?
+  eInvoiceClientId    String?
+  eInvoiceClientSecret String?
+  eInvoiceSandbox     Boolean @default(true)
+
+  // SMTP Settings (optional — if set, overrides Resend)
+  smtpEnabled         Boolean @default(false)
+  smtpHost            String?
+  smtpPort            Int?
+  smtpUser            String?
+  smtpPass            String?
+  smtpFrom            String?
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+}
+
+// Per-location GSTIN and address
+model ShopLocation {
+  id          String   @id @default(cuid())
+  shopId      String
+  locationGid String   // Shopify location GID e.g. gid://shopify/Location/123
+  name        String
+  gstin       String?
+  address     String?
+  city        String?
+  state       String?
+  stateCode   String?
+  pincode     String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, locationGid])
+  @@index([shopId])
+}
+
+// GST Report generation history
+model ReportHistory {
+  id         String   @id @default(cuid())
+  shopId     String
+  reportType String   // "GSTR-1", "GSTR-3B", "B2B-CSV", "B2C-CSV", "HSN-CSV"
+  dateFrom   String
+  dateTo     String
+  fileUrl    String?
+  fileName   String?
+  createdAt  DateTime @default(now())
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  @@index([shopId])
+}
+
+// GST Invoice
+model Invoice {
+  id               String   @id @default(cuid())
+  shopId           String
+  orderId          String
+  orderName        String?
+  invoiceNumber    String
+  invoiceDate      DateTime @default(now())
+  invoiceType      String   @default("TAX_INVOICE") // "TAX_INVOICE" | "BILL_OF_SUPPLY" | "CREDIT_NOTE"
+  supplyType       String   @default("B2C")         // "B2B" | "B2C"
+  taxType          String   @default("IGST")         // "IGST" | "CGST_SGST"
+
+  // Buyer details
+  buyerName        String?
+  buyerEmail       String?
+  buyerPhone       String?
+  buyerAddress     String?
+  buyerCity        String?
+  buyerState       String?
+  buyerStateCode   String?
+  buyerPincode     String?
+  buyerGstin       String?
+
+  // Amounts
+  subTotal         Float    @default(0)
+  discountAmount   Float    @default(0)
+  taxableAmount    Float    @default(0)
+  cgstAmount       Float    @default(0)
+  sgstAmount       Float    @default(0)
+  igstAmount       Float    @default(0)
+  shippingAmount   Float    @default(0)
+  shippingTax      Float    @default(0)
+  totalAmount      Float    @default(0)
+  orderNote        String?
+  paymentMethod    String?
+  orderTags        String?
+  amountInWords    String?
+
+  // Place of supply
+  placeOfSupply    String?
+  reverseCharge    Boolean  @default(false)
+
+  // E-Invoice
+  irn              String?
+  irnStatus        String?  // "GENERATED" | "CANCELLED"
+  ackNo            String?
+  ackDate          String?
+  qrCode           String?  @db.Text
+
+  customFieldValues String?  // JSON: { "key": "value", ... } for per-invoice custom field data
+
+  pdfUrl           String?
+  pdfGeneratedAt   DateTime?
+  emailSentAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  shop      Shop          @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  lineItems InvoiceItem[]
+  emailLogs EmailLog[]
+
+  @@unique([shopId, invoiceNumber])
+  @@index([shopId, invoiceDate])
+  @@index([shopId, orderId])
+}
+
+// Invoice line items
+model InvoiceItem {
+  id           String  @id @default(cuid())
+  invoiceId    String
+  productName  String
+  variantName  String?
+  hsnCode      String?
+  sacCode      String?
+  quantity     Float
+  unit         String  @default("NOS")
+  unitPrice    Float
+  discount     Float   @default(0)
+  taxableValue Float
+  cgstRate     Float   @default(0)
+  sgstRate     Float   @default(0)
+  igstRate     Float   @default(0)
+  cgstAmount   Float   @default(0)
+  sgstAmount   Float   @default(0)
+  igstAmount   Float   @default(0)
+  totalAmount  Float
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// B2B customers with GSTIN
+model B2BCustomer {
+  id               String   @id @default(cuid())
+  shopId           String
+  shopifyCustomerId String?  // Shopify customer GID (optional link)
+  companyName      String
+  gstin            String
+  email            String?
+  phone            String?
+  address          String?
+  city             String?
+  state            String?
+  stateCode        String?
+  pincode          String?
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([shopId])
+  @@unique([shopId, gstin])
+}
+
+// Email send log
+model EmailLog {
+  id        String   @id @default(cuid())
+  shopId    String
+  invoiceId String
+  sentTo    String
+  subject   String?
+  status    String   @default("pending") // "pending" | "sent" | "failed"
+  errorMsg  String?
+  sentAt    DateTime?
+  createdAt DateTime @default(now())
+
+  shop    Shop    @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+// Per-template deep customization settings (JSON blobs per section)
+model TemplateCustomization {
+  id         String   @id @default(cuid())
+  shopId     String
+  templateId String   // "template-1" through "template-6"
+
+  // Branding: { fontFamily, headingSize, bodySize }
+  branding   Json?
+  // Overview: { showLogo, logoWidth, showTitle, invoiceTitle, showSupplierGstin, showQrCode,
+  //             showPaidWatermark, fields: { invoiceNumber, orderNumber, orderDate, dueDate,
+  //             placeOfSupply, paymentGateway, poNumber, trackingInfo, orderTags } }
+  overview   Json?
+  // Address: { supplier: { show, fields... }, billing: { show, fields... }, shipping: { show, fields... }, fallback }
+  address    Json?
+  // Line Items: { columnOrder, columnVisibility, options: { productImage, sku, barcode, barcodeWidth,
+  //              showBarcodeValue, weight, vendor, fulfillmentLocation, compareAtPrice },
+  //              taxLabels: { igst, cgst, sgst }, showRefundQty, showSummaryRow }
+  lineItems  Json?
+  // Notes: { showOrderNotes, orderNoteTitle, showThankYou, thankYouNote,
+  //          showContactEmail, emailPrefixText, contactEmail }
+  notes      Json?
+  // Totals: { rowOrder, rowVisibility: { discount, beforeTax, totalTax, afterTax, shippingAmount,
+  //           shippingTax, shippingTotal, grandTotal, shippingHsn, totalRefunded, outstanding },
+  //          showTotalInWords, showSignature }
+  totals     Json?
+  // Footer: { hideSocialOnPrint, website: { show, label, url },
+  //           facebook: { show, label, url }, instagram: { show, label, url }, x: { show, label, url },
+  //           showFooterNotes, footerNotes, showDisclaimer }
+  footer     Json?
+  // Labels: { invoiceTitle, gstin, taxInvoiceTitle, invoiceNumberLabel, orderDateLabel,
+  //           placeOfSupplyLabel, paymentLabel, supplierLabel, billToLabel, shipToLabel,
+  //           igstLabel, cgstLabel, sgstLabel, orderNoteTitle, totalInWordsLabel }
+  labels     Json?
+
+  // Custom Liquid/HTML template (Code Editor mode)
+  customHtmlTemplate String? @db.Text
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@unique([shopId, templateId])
+  @@index([shopId])
+}
