@@ -33,7 +33,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         where: { shopId: shop.id, createdAt: { gte: startOfMonth } },
       }),
       prisma.invoice.count({
-        where: { shopId: shop.id, emailSentAt: null, createdAt: { gte: startOfMonth } },
+        where: {
+          shopId: shop.id,
+          createdAt: { gte: startOfMonth },
+          // MongoDB: optional fields may be missing entirely, not just null
+          OR: [{ emailSentAt: null }, { emailSentAt: { isSet: false } }],
+        },
       }),
       prisma.invoice.findMany({
         where: { shopId: shop.id },

@@ -3,13 +3,16 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mongodb"
   url      = env("DATABASE_URL")
 }
 
 // Shopify session storage (required by shopify-app-remix)
 model Session {
-  id                  String    @id
+  // MongoDB _id is immutable, but the Shopify session storage re-sends `id` on every upsert —
+  // so keep Mongo's own ObjectId as the primary key and store Shopify's session id separately.
+  mongoId             String    @id @default(auto()) @map("_id") @db.ObjectId
+  id                  String    @unique
   shop                String
   state               String
   isOnline            Boolean   @default(false)
@@ -30,7 +33,7 @@ model Session {
 
 // Merchant shop settings
 model Shop {
-  id              String   @id @default(cuid())
+  id              String   @id @default(cuid()) @map("_id")
   shopDomain      String   @unique
   gstin           String?
   businessName    String?
@@ -62,7 +65,7 @@ model Shop {
 
 // Invoice display & email settings
 model ShopSettings {
-  id                  String  @id @default(cuid())
+  id                  String  @id @default(cuid()) @map("_id")
   shopId              String  @unique
   templateId          String  @default("template-1")
   packingSlipTemplateId String @default("default")
@@ -122,7 +125,7 @@ model ShopSettings {
 
 // Per-location GSTIN and address
 model ShopLocation {
-  id          String   @id @default(cuid())
+  id          String   @id @default(cuid()) @map("_id")
   shopId      String
   locationGid String   // Shopify location GID e.g. gid://shopify/Location/123
   name        String
@@ -144,7 +147,7 @@ model ShopLocation {
 
 // GST Report generation history
 model ReportHistory {
-  id         String   @id @default(cuid())
+  id         String   @id @default(cuid()) @map("_id")
   shopId     String
   reportType String   // "GSTR-1", "GSTR-3B", "B2B-CSV", "B2C-CSV", "HSN-CSV"
   dateFrom   String
@@ -159,7 +162,7 @@ model ReportHistory {
 
 // GST Invoice
 model Invoice {
-  id               String   @id @default(cuid())
+  id               String   @id @default(cuid()) @map("_id")
   shopId           String
   orderId          String
   orderName        String?
@@ -204,7 +207,7 @@ model Invoice {
   irnStatus        String?  // "GENERATED" | "CANCELLED"
   ackNo            String?
   ackDate          String?
-  qrCode           String?  @db.Text
+  qrCode           String?
 
   customFieldValues String?  // JSON: { "key": "value", ... } for per-invoice custom field data
 
@@ -225,7 +228,7 @@ model Invoice {
 
 // Invoice line items
 model InvoiceItem {
-  id           String  @id @default(cuid())
+  id           String  @id @default(cuid()) @map("_id")
   invoiceId    String
   productName  String
   variantName  String?
@@ -249,7 +252,7 @@ model InvoiceItem {
 
 // B2B customers with GSTIN
 model B2BCustomer {
-  id               String   @id @default(cuid())
+  id               String   @id @default(cuid()) @map("_id")
   shopId           String
   shopifyCustomerId String?  // Shopify customer GID (optional link)
   companyName      String
@@ -271,7 +274,7 @@ model B2BCustomer {
 
 // Email send log
 model EmailLog {
-  id        String   @id @default(cuid())
+  id        String   @id @default(cuid()) @map("_id")
   shopId    String
   invoiceId String
   sentTo    String
@@ -287,7 +290,7 @@ model EmailLog {
 
 // Per-template deep customization settings (JSON blobs per section)
 model TemplateCustomization {
-  id         String   @id @default(cuid())
+  id         String   @id @default(cuid()) @map("_id")
   shopId     String
   templateId String   // "template-1" through "template-6"
 
@@ -320,7 +323,7 @@ model TemplateCustomization {
   labels     Json?
 
   // Custom Liquid/HTML template (Code Editor mode)
-  customHtmlTemplate String? @db.Text
+  customHtmlTemplate String?
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
