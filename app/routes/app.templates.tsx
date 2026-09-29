@@ -74,7 +74,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return json({ error: "Invalid template" }, { status: 400 });
     }
     if (templateId !== "template-1" && !canUseFeature(shop.currentPlan, "all-templates")) {
-      return json({ error: "Templates 2–6 require Starter plan or higher. Please upgrade." }, { status: 403 });
+      return json({ error: "Templates 2–6 require the Pro plan. Please upgrade." }, { status: 403 });
     }
     await prisma.shopSettings.upsert({
       where: { shopId: shop.id },
@@ -392,7 +392,7 @@ export default function TemplatesPage() {
                                 {isActive && <Badge tone="success">Active</Badge>}
                                 {isLocked && (
                                   <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                                    🔒 Startup+
+                                    🔒 Pro
                                   </span>
                                 )}
                               </InlineStack>

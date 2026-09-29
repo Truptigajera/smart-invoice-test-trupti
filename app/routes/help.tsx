@@ -1,5 +1,6 @@
 import type { MetaFunction } from "@remix-run/node";
 import { useState } from "react";
+import { FREE_ORDER_LIMIT, PLAN_PRO_PRICE } from "~/billing-plans";
 
 export const meta: MetaFunction = () => [
   { title: "Help & Documentation — InvoiceGST" },
@@ -259,7 +260,7 @@ export default function HelpPage() {
               <li style={{ marginBottom: 6 }}>Choose <em>Original</em>, <em>Duplicate</em>, or <em>Triplicate</em>.</li>
             </ol>
 
-            <SubHeading>Bulk download (Starter plan+)</SubHeading>
+            <SubHeading>Bulk download (Pro plan)</SubHeading>
             <p style={pStyle}>
               On the Invoices list, check 2 or more rows. A bulk action bar appears at the bottom.
               Click <strong>Download PDFs</strong> to get all selected invoices as a single ZIP file.
@@ -398,7 +399,7 @@ export default function HelpPage() {
               buyer's email on the order. A success banner confirms delivery.
             </p>
 
-            <SubHeading>Bulk email (Starter plan+)</SubHeading>
+            <SubHeading>Bulk email (Pro plan)</SubHeading>
             <p style={pStyle}>
               On the Invoices list, select multiple rows → bulk action bar → <strong>Send Emails</strong>.
               All selected customers receive their individual invoice email.
@@ -417,7 +418,7 @@ export default function HelpPage() {
               ["From Name", "Display name shown in the inbox, e.g. your business name"],
             ]} />
 
-            <SubHeading>WhatsApp (Growth plan+)</SubHeading>
+            <SubHeading>WhatsApp (Pro plan)</SubHeading>
             <p style={pStyle}>
               On Invoice Detail, click <strong>WhatsApp</strong>. This opens a pre-filled WhatsApp message
               on your phone with a link to the invoice PDF. Send it directly to the customer from your phone.
@@ -489,15 +490,12 @@ export default function HelpPage() {
             <p style={pStyle}>Go to <strong>Billing</strong> in the left menu to view and change your plan.</p>
 
             <DocTable headers={["Plan", "Invoices/month", "Key features"]} rows={[
-              ["Free", "5", "Auto invoices, 6 templates, basic GSTR reports, email delivery"],
-              ["Starter — $4.95/mo", "300", "Everything Free + Bulk PDF download, Bulk email"],
-              ["Growth — $9.99/mo", "2,500", "Everything Starter + WhatsApp share, Tally export, custom SMTP"],
-              ["Scale — $34.99/mo", "Unlimited", "Everything Growth + E-Invoice IRN, multi-location GSTIN"],
+              ["Free", String(FREE_ORDER_LIMIT), "GST invoice PDF, Template 1, GSTIN validation"],
+              [`Pro — $${PLAN_PRO_PRICE}/mo`, "Unlimited", "Everything in Free + all templates, GST reports, bulk download & email, WhatsApp, Tally export, E-Invoice IRN, multi-location GSTIN"],
             ]} />
 
             <InfoBox>
-              All paid plans include a <strong>7-day free trial</strong>. You are not charged until the trial ends.
-              Billing is handled by Shopify — charges appear on your Shopify invoice.
+              Billing is handled by Shopify — charges appear on your Shopify invoice. Cancel anytime from the Billing page.
             </InfoBox>
 
             <SubHeading>What counts as an order?</SubHeading>

@@ -86,7 +86,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   // Generate & save PDF, return WhatsApp deep-link to client
   if (intent === "whatsapp-share") {
     if (!canUseFeature(shop.currentPlan, "whatsapp")) {
-      return json({ error: "WhatsApp sharing requires Growth plan or higher. Please upgrade." }, { status: 403 });
+      return json({ error: "WhatsApp sharing requires the Pro plan. Please upgrade." }, { status: 403 });
     }
     try {
       const pdfRelUrl = await generateAndSavePDF(invoice.id);
@@ -128,7 +128,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   // Generate E-Invoice IRN via NIC IRP
   if (intent === "generate-irn") {
     if (!canUseFeature(shop.currentPlan, "einvoice")) {
-      return json({ error: "E-Invoice (IRN) requires Scale plan. Please upgrade." }, { status: 403 });
+      return json({ error: "E-Invoice (IRN) requires the Pro plan. Please upgrade." }, { status: 403 });
     }
     try {
       const result = await generateIRN(invoice.id, shop.id);
@@ -282,7 +282,7 @@ export default function InvoiceDetailPage() {
             }]
           : []),
         {
-          content: isWhatsApping ? "Preparing…" : canUseFeature(currentPlan, "whatsapp") ? "Share on WhatsApp" : "WhatsApp [Business+]",
+          content: isWhatsApping ? "Preparing…" : canUseFeature(currentPlan, "whatsapp") ? "Share on WhatsApp" : "WhatsApp [Pro]",
           onAction: canUseFeature(currentPlan, "whatsapp") ? handleWhatsApp : () => navigate("/app/billing"),
           loading: isWhatsApping,
         },

@@ -83,7 +83,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // ── Bulk ZIP download ──────────────────────────────────────────────────────
   if (intent === "bulk-download-zip") {
     if (!canUseFeature(shop.currentPlan, "bulk-download")) {
-      return json({ error: "Bulk PDF download requires Starter plan or higher. Please upgrade." }, { status: 403 });
+      return json({ error: "Bulk PDF download requires the Pro plan. Please upgrade." }, { status: 403 });
     }
     const invoiceIds: string[] = JSON.parse(formData.get("invoiceIds") as string || "[]");
     if (!invoiceIds.length) return json({ error: "No invoices selected" }, { status: 400 });
@@ -112,7 +112,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // ── Bulk email send ────────────────────────────────────────────────────────
   if (intent === "bulk-send-email") {
     if (!canUseFeature(shop.currentPlan, "bulk-email")) {
-      return json({ error: "Bulk email requires Starter plan or higher. Please upgrade." }, { status: 403 });
+      return json({ error: "Bulk email requires the Pro plan. Please upgrade." }, { status: 403 });
     }
     const invoiceIds: string[] = JSON.parse(formData.get("invoiceIds") as string || "[]");
     if (!invoiceIds.length) return json({ error: "No invoices selected" }, { status: 400 });
@@ -255,14 +255,14 @@ export default function InvoicesPage() {
     {
       content: canBulkDownload
         ? (isBulkLoading ? "Generating…" : `Download PDFs (${selectedResources.length})`)
-        : "Download PDFs [Startup+]",
+        : "Download PDFs [Pro]",
       onAction: canBulkDownload ? handleBulkDownload : () => navigate("/app/billing"),
       disabled: isBulkLoading,
     },
     {
       content: canBulkEmail
         ? (isBulkLoading ? "Sending…" : `Send Emails (${selectedResources.length})`)
-        : "Send Emails [Startup+]",
+        : "Send Emails [Pro]",
       onAction: canBulkEmail ? handleBulkEmail : () => navigate("/app/billing"),
       disabled: isBulkLoading,
     },

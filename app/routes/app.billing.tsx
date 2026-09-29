@@ -12,35 +12,23 @@ import {
   Divider,
   Box,
   Banner,
-  Tabs,
   ProgressBar,
   Icon,
 } from "@shopify/polaris";
 import { CheckIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
-import { useState, useCallback, useEffect } from "react";
+import { useCallback } from "react";
 import { authenticate } from "../shopify.server";
-import {
-  PLAN_STARTUP,
-  PLAN_BUSINESS,
-  PLAN_ADVANCED,
-  PLAN_STARTUP_ANNUAL,
-  PLAN_BUSINESS_ANNUAL,
-  PLAN_ADVANCED_ANNUAL,
-  FREE_ORDER_LIMIT,
-} from "../billing-plans";
+import { PLAN_PRO, PLAN_PRO_PRICE, FREE_ORDER_LIMIT, BILLING_IS_TEST } from "../billing-plans";
 import prisma from "../db.server";
 
-// ── Types ────────────────────────────────────────────────────────────────────
+// ── Plans ────────────────────────────────────────────────────────────────────
 
 interface PlanInfo {
-  key: string;
+  key: "free" | "pro";
   name: string;
-  monthlyPrice: number;
-  annualPrice: number;    // total per year
-  annualMonthly: number;  // per-month when billed annually
-  orderLimit: number | null;
-  highlight: boolean;
+  price: string;
+  subPrice: string;
   features: string[];
 }
 
@@ -48,109 +36,54 @@ const PLANS: PlanInfo[] = [
   {
     key: "free",
     name: "Free",
-    monthlyPrice: 0,
-    annualPrice: 0,
-    annualMonthly: 0,
-    orderLimit: FREE_ORDER_LIMIT,
-    highlight: false,
+    price: "Free",
+    subPrice: "",
     features: [
       `${FREE_ORDER_LIMIT} invoices / month`,
-      "GST Invoice PDF",
-      "Email delivery",
+      "GST Invoice PDF (CGST / SGST / IGST)",
       "Template 1",
       "GSTIN validation",
     ],
   },
   {
-    key: "startup",
-    name: "Startup",
-    monthlyPrice: 9.9,
-    annualPrice: 77.28,
-    annualMonthly: 6.44,
-    orderLimit: 300,
-    highlight: false,
+    key: "pro",
+    name: "Pro",
+    price: `$${PLAN_PRO_PRICE.toFixed(2)}/mo`,
+    subPrice: "billed monthly",
     features: [
-      "300 invoices / month",
-      "Everything in Free",
-      "All invoice templates",
-      "GST Reports (GSTR-1, 3B)",
-      "Priority support",
-    ],
-  },
-  {
-    key: "business",
-    name: "Business",
-    monthlyPrice: 19.98,
-    annualPrice: 155.88,
-    annualMonthly: 12.99,
-    orderLimit: 2500,
-    highlight: true,
-    features: [
-      "2500 invoices / month",
-      "Everything in Startup",
-      "E-Invoice (IRN + QR code)",
-      "B2B customer GSTIN",
-      "Packing Slip",
-    ],
-  },
-  {
-    key: "advanced",
-    name: "Advanced",
-    monthlyPrice: 69.98,
-    annualPrice: 545.88,
-    annualMonthly: 45.49,
-    orderLimit: null,
-    highlight: false,
-    features: [
-      "Unlimited orders",
-      "Everything in Business",
-      "Multi-location GSTIN",
-      "Tally integration",
-      "WhatsApp delivery",
+      "Unlimited invoices",
+      "All invoice & packing slip templates",
+      "GST Reports (GSTR-1, 3B) & Tally export",
+      "Auto email, bulk download & bulk email",
+      "B2B customers, E-Invoice (IRN), WhatsApp",
+      "Multi-location GSTIN & custom SMTP",
     ],
   },
 ];
-
-function getPlanKey(subscriptionName: string): string {
-  if (subscriptionName === PLAN_STARTUP || subscriptionName === PLAN_STARTUP_ANNUAL) return "startup";
-  if (subscriptionName === PLAN_BUSINESS || subscriptionName === PLAN_BUSINESS_ANNUAL) return "business";
-  if (subscriptionName === PLAN_ADVANCED || subscriptionName === PLAN_ADVANCED_ANNUAL) return "advanced";
-  return "free";
-}
 
 // ── Loader ───────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { billing, session } = await authenticate.admin(request);
 
-  const isTest = process.env.NODE_ENV !== "production";
-  const billingCheck = await billing.check({
-    plans: [
-      PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
-      PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
-    ],
-    isTest,
-  });
+  // Any active subscription is paid — Pro, or a retired plan an existing merchant is still on
+  const billingCheck = await billing.check({ isTest: BILLING_IS_TEST });
+  const activeSub = billingCheck.appSubscriptions[0] ?? null;
 
   const shop = await prisma.shop.findUnique({
     where: { shopDomain: session.shop },
     select: { ordersThisMonth: true, planResetDate: true },
   });
 
-  const activeSub = billingCheck.appSubscriptions[0] ?? null;
-  const currentPlanKey = activeSub ? getPlanKey(activeSub.name) : "free";
+  // The counter only resets when the next invoice is created, so a count from a past month is 0
+  const now = new Date();
+  const reset = shop?.planResetDate ? new Date(shop.planResetDate) : null;
+  const countIsThisMonth = !!reset && reset.getMonth() === now.getMonth() && reset.getFullYear() === now.getFullYear();
 
   return json({
-    currentPlanKey,
-    activeSub: activeSub
-      ? {
-          id: activeSub.id,
-          name: activeSub.name,
-          trialDays: activeSub.trialDays ?? 0,
-        }
-      : null,
-    ordersThisMonth: shop?.ordersThisMonth ?? 0,
-    planResetDate: shop?.planResetDate?.toISOString() ?? null,
+    currentPlanKey: activeSub ? "pro" : "free",
+    activeSub: activeSub ? { id: activeSub.id, name: activeSub.name, test: activeSub.test } : null,
+    invoicesThisMonth: countIsThisMonth ? shop?.ordersThisMonth ?? 0 : 0,
   });
 };
 
@@ -160,19 +93,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const { billing } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
-  type PlanKey = typeof PLAN_STARTUP | typeof PLAN_BUSINESS | typeof PLAN_ADVANCED | typeof PLAN_STARTUP_ANNUAL | typeof PLAN_BUSINESS_ANNUAL | typeof PLAN_ADVANCED_ANNUAL;
-  const plan = formData.get("plan") as PlanKey;
-
-  const isTest = process.env.NODE_ENV !== "production";
 
   if (intent === "subscribe") {
-    await billing.request({ plan, isTest });
-    // billing.request throws a redirect — code below never runs
+    // Redirects the merchant to Shopify's charge approval page — code below never runs
+    await billing.request({ plan: PLAN_PRO, isTest: BILLING_IS_TEST });
   }
 
   if (intent === "cancel") {
     const subscriptionId = formData.get("subscriptionId") as string;
-    await billing.cancel({ subscriptionId, isTest, prorate: false });
+    await billing.cancel({ subscriptionId, isTest: BILLING_IS_TEST, prorate: false });
     return json({ success: true });
   }
 
@@ -182,45 +111,21 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { currentPlanKey, activeSub, ordersThisMonth } = useLoaderData<typeof loader>();
-  const [billingTabIndex, setBillingTabIndex] = useState(0);
-  const isAnnual = billingTabIndex === 1;
+  const { currentPlanKey, activeSub, invoicesThisMonth } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
-  const [loadingPlanKey, setLoadingPlanKey] = useState<string | null>(null);
+  const busyIntent = fetcher.state !== "idle" ? fetcher.formData?.get("intent") : null;
 
-  useEffect(() => {
-    if (fetcher.state === "idle") setLoadingPlanKey(null);
-  }, [fetcher.state]);
+  const isFree = currentPlanKey === "free";
+  const usagePercent = isFree ? Math.min((invoicesThisMonth / FREE_ORDER_LIMIT) * 100, 100) : 0;
 
-  const currentPlanInfo = PLANS.find((p) => p.key === currentPlanKey) ?? PLANS[0];
-  const orderLimit = currentPlanInfo.orderLimit ?? 0;
-  const usagePercent = orderLimit > 0 ? Math.min((ordersThisMonth / orderLimit) * 100, 100) : 0;
-
-  const handleSubscribe = useCallback(
-    (planKey: string) => {
-      let planName: string;
-      if (planKey === "startup") planName = isAnnual ? PLAN_STARTUP_ANNUAL : PLAN_STARTUP;
-      else if (planKey === "business") planName = isAnnual ? PLAN_BUSINESS_ANNUAL : PLAN_BUSINESS;
-      else planName = isAnnual ? PLAN_ADVANCED_ANNUAL : PLAN_ADVANCED;
-
-      setLoadingPlanKey(planKey);
-      fetcher.submit({ intent: "subscribe", plan: planName }, { method: "POST" });
-    },
-    [fetcher, isAnnual]
-  );
+  const handleSubscribe = useCallback(() => {
+    fetcher.submit({ intent: "subscribe" }, { method: "POST" });
+  }, [fetcher]);
 
   const handleCancel = useCallback(() => {
     if (!activeSub) return;
-    fetcher.submit(
-      { intent: "cancel", subscriptionId: activeSub.id },
-      { method: "POST" }
-    );
+    fetcher.submit({ intent: "cancel", subscriptionId: activeSub.id }, { method: "POST" });
   }, [fetcher, activeSub]);
-
-  const tabs = [
-    { id: "monthly", content: "Monthly" },
-    { id: "annual", content: "Annual (Save ~35%)" },
-  ];
 
   return (
     <Page title="Plans & Billing">
@@ -231,24 +136,17 @@ export default function BillingPage() {
         <Card>
           <BlockStack gap="300">
             <InlineStack align="space-between" blockAlign="center">
-              <BlockStack gap="100">
+              <InlineStack gap="200" blockAlign="center">
                 <Text as="h3" variant="headingMd">
                   Current Plan:{" "}
                   <Text as="span" variant="headingMd" tone="success" fontWeight="bold">
-                    {currentPlanInfo.name}
+                    {isFree ? "Free" : "Pro"}
                   </Text>
                 </Text>
-                {activeSub?.trialDays && activeSub.trialDays > 0 ? (
-                  <Badge tone="attention">Trial active</Badge>
-                ) : null}
-              </BlockStack>
-              {currentPlanKey !== "free" && (
-                <Button
-                  variant="plain"
-                  tone="critical"
-                  onClick={handleCancel}
-                  loading={fetcher.state !== "idle" && fetcher.formData?.get("intent") === "cancel"}
-                >
+                {activeSub?.test && <Badge tone="attention">Test charge</Badge>}
+              </InlineStack>
+              {!isFree && (
+                <Button variant="plain" tone="critical" onClick={handleCancel} loading={busyIntent === "cancel"}>
                   Cancel subscription
                 </Button>
               )}
@@ -258,72 +156,58 @@ export default function BillingPage() {
 
             <BlockStack gap="200">
               <InlineStack align="space-between">
-                <Text as="p" variant="bodySm" tone="subdued">
-                  Invoices this month
-                </Text>
+                <Text as="p" variant="bodySm" tone="subdued">Invoices this month</Text>
                 <Text as="p" variant="bodySm">
-                  {ordersThisMonth}
-                  {currentPlanInfo.orderLimit ? ` / ${currentPlanInfo.orderLimit}` : " (Unlimited)"}
+                  {invoicesThisMonth}
+                  {isFree ? ` / ${FREE_ORDER_LIMIT}` : " (Unlimited)"}
                 </Text>
               </InlineStack>
-              {currentPlanInfo.orderLimit && (
+              {isFree && (
                 <ProgressBar
                   progress={usagePercent}
-                  tone={usagePercent >= 90 ? "critical" : usagePercent >= 70 ? "highlight" : "success"}
+                  tone={usagePercent >= 100 ? "critical" : usagePercent >= 70 ? "highlight" : "success"}
                   size="small"
                 />
               )}
             </BlockStack>
 
-            {usagePercent >= 80 && currentPlanKey !== "advanced" && (
-              <Banner tone="warning">
-                You have used {Math.round(usagePercent)}% of your monthly order limit. Consider upgrading to avoid disruption.
+            {isFree && invoicesThisMonth >= FREE_ORDER_LIMIT ? (
+              <Banner tone="critical">
+                You've used all {FREE_ORDER_LIMIT} free invoices this month. Upgrade to Pro to keep creating GST invoices.
               </Banner>
-            )}
+            ) : isFree && usagePercent >= 70 ? (
+              <Banner tone="warning">
+                You've used {invoicesThisMonth} of {FREE_ORDER_LIMIT} free invoices this month.
+              </Banner>
+            ) : null}
           </BlockStack>
         </Card>
-
-        {/* Billing interval toggle */}
-        <Tabs tabs={tabs} selected={billingTabIndex} onSelect={setBillingTabIndex} fitted />
 
         {/* Plan cards */}
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: "16px",
           }}
         >
           {PLANS.map((plan) => {
             const isCurrent = plan.key === currentPlanKey;
-            const price = plan.key === "free"
-              ? "Free"
-              : isAnnual
-                ? `$${plan.annualMonthly.toFixed(2)}/mo`
-                : `$${plan.monthlyPrice.toFixed(2)}/mo`;
-            const subPrice = plan.key !== "free" && isAnnual
-              ? `$${plan.annualPrice.toFixed(2)} billed annually`
-              : plan.key !== "free"
-                ? "billed monthly"
-                : "";
+            const isPro = plan.key === "pro";
 
             return (
               <div
                 key={plan.key}
                 style={{
                   borderRadius: "8px",
-                  border: plan.highlight
-                    ? "2px solid #008060"
-                    : isCurrent
-                      ? "2px solid #1a73e8"
-                      : "1px solid #e1e3e5",
+                  border: isPro ? "2px solid #008060" : isCurrent ? "2px solid #1a73e8" : "1px solid #e1e3e5",
                   overflow: "hidden",
                 }}
               >
-                {plan.highlight && (
+                {isPro && (
                   <Box background="bg-fill-success" padding="100">
                     <Text as="p" variant="bodySm" alignment="center" fontWeight="semibold" tone="success">
-                      Most Popular
+                      Recommended
                     </Text>
                   </Box>
                 )}
@@ -335,12 +219,9 @@ export default function BillingPage() {
                     </InlineStack>
 
                     <BlockStack gap="050">
-                      <Text as="p" variant="headingXl" fontWeight="bold">{price}</Text>
-                      {subPrice && (
-                        <Text as="p" variant="bodySm" tone="subdued">{subPrice}</Text>
-                      )}
-                      {plan.key !== "free" && (
-                        <Text as="p" variant="bodySm" tone="subdued">7-day free trial</Text>
+                      <Text as="p" variant="headingXl" fontWeight="bold">{plan.price}</Text>
+                      {plan.subPrice && (
+                        <Text as="p" variant="bodySm" tone="subdued">{plan.subPrice}</Text>
                       )}
                     </BlockStack>
 
@@ -359,25 +240,14 @@ export default function BillingPage() {
 
                     <Box paddingBlockStart="200">
                       {isCurrent ? (
-                        <Button fullWidth disabled variant="secondary">
-                          Current Plan
-                        </Button>
-                      ) : plan.key === "free" ? (
-                        <Button fullWidth variant="secondary" onClick={handleCancel} disabled={currentPlanKey === "free"}>
-                          Downgrade to Free
+                        <Button fullWidth disabled variant="secondary">Current Plan</Button>
+                      ) : isPro ? (
+                        <Button fullWidth variant="primary" onClick={handleSubscribe} loading={busyIntent === "subscribe"}>
+                          Upgrade to Pro
                         </Button>
                       ) : (
-                        <Button
-                          fullWidth
-                          variant={plan.highlight ? "primary" : "secondary"}
-                          onClick={() => handleSubscribe(plan.key)}
-                          loading={loadingPlanKey === plan.key}
-                        >
-                          {currentPlanKey === "free"
-                            ? `Start Free Trial`
-                            : plan.key > currentPlanKey
-                              ? "Upgrade"
-                              : "Downgrade"}
+                        <Button fullWidth variant="secondary" onClick={handleCancel} loading={busyIntent === "cancel"}>
+                          Downgrade to Free
                         </Button>
                       )}
                     </Box>

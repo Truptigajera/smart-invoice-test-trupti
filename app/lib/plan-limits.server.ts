@@ -1,22 +1,11 @@
 import { prisma } from "~/db.server";
-import {
-  PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
-  PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
-  FREE_ORDER_LIMIT,
-} from "~/billing-plans";
+import { FREE_ORDER_LIMIT } from "~/billing-plans";
 
-export const PLAN_ORDER_LIMITS: Record<string, number | null> = {
-  free: FREE_ORDER_LIMIT,
-  [PLAN_STARTUP]: 300,
-  [PLAN_BUSINESS]: 2500,
-  [PLAN_ADVANCED]: null,
-  [PLAN_STARTUP_ANNUAL]: 300,
-  [PLAN_BUSINESS_ANNUAL]: 2500,
-  [PLAN_ADVANCED_ANNUAL]: null,
-};
-
+// Monthly invoice limit — null means unlimited. planKey is shop.currentPlan: "free", or the name of
+// the active Shopify subscription. Any paid subscription (Pro, or a retired Startup/Business/Advanced
+// plan an existing merchant is still on) is unlimited.
 export function getOrderLimit(planKey: string): number | null {
-  return planKey in PLAN_ORDER_LIMITS ? PLAN_ORDER_LIMITS[planKey] : FREE_ORDER_LIMIT;
+  return !planKey || planKey === "free" ? FREE_ORDER_LIMIT : null;
 }
 
 // Increment monthly order counter, reset if new month

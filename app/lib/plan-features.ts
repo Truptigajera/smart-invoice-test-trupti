@@ -51,20 +51,24 @@ const TIER_RANK: Record<PlanTier, number> = {
   scale:   3,
 };
 
+// Only Free and Pro are sold now, so every paid tier is presented as "Pro" in upgrade prompts.
+// starter/growth remain for merchants still on the retired Startup/Business plans.
 export const PLAN_META: Record<PlanTier, { name: string; upgradeLabel: string }> = {
-  free:    { name: "Free",     upgradeLabel: "Upgrade to Startup"  },
-  starter: { name: "Startup",  upgradeLabel: "Upgrade to Business" },
-  growth:  { name: "Business", upgradeLabel: "Upgrade to Advanced" },
-  scale:   { name: "Advanced", upgradeLabel: ""                    },
+  free:    { name: "Free", upgradeLabel: "Upgrade to Pro" },
+  starter: { name: "Pro",  upgradeLabel: "Upgrade to Pro" },
+  growth:  { name: "Pro",  upgradeLabel: "Upgrade to Pro" },
+  scale:   { name: "Pro",  upgradeLabel: "" },
 };
 
 // ── Normalize Shopify billing plan name → internal tier ──────────────────────
 export function normalizePlan(currentPlan: string): PlanTier {
   const p = (currentPlan || "").toLowerCase();
-  if (p.includes("advanced") || p.includes("unlimited") || p === "scale") return "scale";
-  if (p.includes("business") || p.includes("2500")      || p === "growth") return "growth";
-  if (p.includes("startup")  || p.includes("300")       || p === "starter") return "starter";
-  return "free";
+  if (!p || p === "free") return "free";
+  // Retired plans keep the features they were sold with
+  if (p.includes("startup") || p === "starter") return "starter";
+  if (p.includes("business") || p === "growth") return "growth";
+  // Pro (and retired Advanced) unlock everything
+  return "scale";
 }
 
 // ── Main check ────────────────────────────────────────────────────────────────

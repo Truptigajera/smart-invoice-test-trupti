@@ -9,10 +9,7 @@ import { redirect } from "@remix-run/node";
 import { prisma } from "../db.server";
 import { getOrCreateShop } from "../lib/shop.server";
 import { PlanLimitModal } from "../components/PlanLimitModal";
-import {
-  PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
-  PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
-} from "../billing-plans";
+import { BILLING_IS_TEST } from "../billing-plans";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -34,10 +31,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   // Sync active Shopify subscription → shop.currentPlan in DB
   // Runs on every page so plan gates are always up to date
   try {
-    const billingCheck = await billing.check({
-      plans: [PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED, PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL],
-      isTest: true,
-    });
+    // No `plans` filter: any active subscription counts as paid — the current Pro plan, and also
+    // the retired Startup/Business/Advanced plans that existing merchants may still be on.
+    const billingCheck = await billing.check({ isTest: BILLING_IS_TEST });
     const activeSub = billingCheck.appSubscriptions[0] ?? null;
     const newPlan = activeSub?.name ?? "free";
     await prisma.shop.update({

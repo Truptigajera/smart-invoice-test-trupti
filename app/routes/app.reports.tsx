@@ -475,7 +475,7 @@ export default function ReportsPage() {
                   <Text as="h2" variant="headingSm">Tally Export</Text>
                   {!canUseFeature(currentPlan, "tally-export") && (
                     <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                      🔒 Business+
+                      🔒 Pro
                     </span>
                   )}
                 </InlineStack>
@@ -579,7 +579,7 @@ export default function ReportsPage() {
                   <div style={{ padding: "12px 16px", display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
                     {!canUseFeature(currentPlan, "gstr-reports") && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                        🔒 Startup+
+                        🔒 Pro
                       </span>
                     )}
                     <Button
@@ -642,7 +642,7 @@ export default function ReportsPage() {
                   <div style={{ padding: "12px 16px", display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
                     {!canUseFeature(currentPlan, "gstr-reports") && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                        🔒 Startup+
+                        🔒 Pro
                       </span>
                     )}
                     <Button
@@ -702,7 +702,7 @@ export default function ReportsPage() {
                   <div style={{ padding: "12px 16px", display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
                     {!canUseFeature(currentPlan, "gstr-reports") && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                        🔒 Startup+
+                        🔒 Pro
                       </span>
                     )}
                     <Button
@@ -753,7 +753,7 @@ export default function ReportsPage() {
                   <div style={{ padding: "12px 16px", display: "flex", justifyContent: "flex-end", gap: 8, alignItems: "center" }}>
                     {!canUseFeature(currentPlan, "gstr-reports") && (
                       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, background: "#FEF3C7", color: "#92400E", fontSize: 10, fontWeight: 600, padding: "2px 6px", borderRadius: 10, border: "1px solid #FDE68A" }}>
-                        🔒 Startup+
+                        🔒 Pro
                       </span>
                     )}
                     <Button

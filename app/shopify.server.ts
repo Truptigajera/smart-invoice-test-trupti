@@ -8,14 +8,8 @@ import {
 } from "@shopify/shopify-app-remix/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import prisma from "./db.server";
-export {
-  PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
-  PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
-} from "./billing-plans";
-import {
-  PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
-  PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
-} from "./billing-plans";
+import { PLAN_PRO, PLAN_PRO_PRICE } from "./billing-plans";
+export { PLAN_PRO } from "./billing-plans";
 
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
@@ -33,29 +27,8 @@ const shopify = shopifyApp({
     expiringOfflineAccessTokens: true,
   },
   billing: {
-    [PLAN_STARTUP]: {
-      trialDays: 7,
-      lineItems: [{ amount: 9.90, currencyCode: "USD", interval: BillingInterval.Every30Days }],
-    },
-    [PLAN_BUSINESS]: {
-      trialDays: 7,
-      lineItems: [{ amount: 19.98, currencyCode: "USD", interval: BillingInterval.Every30Days }],
-    },
-    [PLAN_ADVANCED]: {
-      trialDays: 7,
-      lineItems: [{ amount: 69.98, currencyCode: "USD", interval: BillingInterval.Every30Days }],
-    },
-    [PLAN_STARTUP_ANNUAL]: {
-      trialDays: 7,
-      lineItems: [{ amount: 77.28, currencyCode: "USD", interval: BillingInterval.Annual }],
-    },
-    [PLAN_BUSINESS_ANNUAL]: {
-      trialDays: 7,
-      lineItems: [{ amount: 155.88, currencyCode: "USD", interval: BillingInterval.Annual }],
-    },
-    [PLAN_ADVANCED_ANNUAL]: {
-      trialDays: 7,
-      lineItems: [{ amount: 545.88, currencyCode: "USD", interval: BillingInterval.Annual }],
+    [PLAN_PRO]: {
+      lineItems: [{ amount: PLAN_PRO_PRICE, currencyCode: "USD", interval: BillingInterval.Every30Days }],
     },
   },
   webhooks: {
