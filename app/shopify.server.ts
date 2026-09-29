@@ -28,6 +28,9 @@ const shopify = shopifyApp({
   distribution: AppDistribution.AppStore,
   future: {
     unstable_newEmbeddedAuthStrategy: true,
+    // Shopify's Admin API rejects non-expiring offline tokens — request expiring ones
+    // (the library refreshes them automatically before they expire)
+    expiringOfflineAccessTokens: true,
   },
   billing: {
     [PLAN_STARTUP]: {
@@ -82,6 +85,17 @@ const shopify = shopifyApp({
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
 });
+
+// Offline sessions saved before expiringOfflineAccessTokens was enabled hold non-expiring tokens,
+// which Shopify now rejects — yet the library treats them as valid forever and never replaces them.
+// Delete them once at startup; the next time the merchant opens the app, token exchange silently
+// stores a fresh expiring token. (Expiring sessions always have `expires`, so they are untouched.)
+prisma.session
+  .deleteMany({ where: { isOnline: false, OR: [{ expires: null }, { expires: { isSet: false } }] } })
+  .then(({ count }) => {
+    if (count) console.log(`[auth] Removed ${count} legacy non-expiring offline session(s)`);
+  })
+  .catch((err) => console.error("[auth] Legacy session cleanup failed:", err));
 
 export default shopify;
 export const apiVersion = ApiVersion.April26;

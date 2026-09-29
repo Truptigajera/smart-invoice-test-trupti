@@ -441,7 +441,7 @@ export default function SettingsPage() {
                     name="gstin"
                     value={gstin}
                     onChange={(v) => setGstin(v.toUpperCase().slice(0, 15))}
-                    placeholder="22AAAAA0000A1Z5"
+                    placeholder="15-character GSTIN"
                     helpText="15-character GST Identification Number."
                     maxLength={15}
                     autoComplete="off"

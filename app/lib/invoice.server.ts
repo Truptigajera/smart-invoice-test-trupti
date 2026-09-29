@@ -6,7 +6,8 @@ import {
   getIndianStateCode,
   amountToWords,
 } from "~/lib/gst";
-import { generateInvoiceNumber, incrementOrderCount } from "~/lib/invoice-number.server";
+import { generateInvoiceNumber } from "~/lib/invoice-number.server";
+import { incrementOrderCount } from "~/lib/plan-limits.server";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 

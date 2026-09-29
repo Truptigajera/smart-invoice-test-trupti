@@ -2,10 +2,11 @@ import { prisma } from "~/db.server";
 import {
   PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
   PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
+  FREE_ORDER_LIMIT,
 } from "~/billing-plans";
 
 export const PLAN_ORDER_LIMITS: Record<string, number | null> = {
-  free: 50,
+  free: FREE_ORDER_LIMIT,
   [PLAN_STARTUP]: 300,
   [PLAN_BUSINESS]: 2500,
   [PLAN_ADVANCED]: null,
@@ -15,7 +16,7 @@ export const PLAN_ORDER_LIMITS: Record<string, number | null> = {
 };
 
 export function getOrderLimit(planKey: string): number | null {
-  return PLAN_ORDER_LIMITS[planKey] ?? 50;
+  return planKey in PLAN_ORDER_LIMITS ? PLAN_ORDER_LIMITS[planKey] : FREE_ORDER_LIMIT;
 }
 
 // Increment monthly order counter, reset if new month

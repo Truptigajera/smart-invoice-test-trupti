@@ -27,6 +27,7 @@ import {
   PLAN_STARTUP_ANNUAL,
   PLAN_BUSINESS_ANNUAL,
   PLAN_ADVANCED_ANNUAL,
+  FREE_ORDER_LIMIT,
 } from "../billing-plans";
 import prisma from "../db.server";
 
@@ -50,10 +51,10 @@ const PLANS: PlanInfo[] = [
     monthlyPrice: 0,
     annualPrice: 0,
     annualMonthly: 0,
-    orderLimit: 50,
+    orderLimit: FREE_ORDER_LIMIT,
     highlight: false,
     features: [
-      "50 orders / month",
+      `${FREE_ORDER_LIMIT} orders / month`,
       "GST Invoice PDF",
       "Email delivery",
       "Template 1",

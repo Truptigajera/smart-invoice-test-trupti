@@ -107,7 +107,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const pincode = field("pincode");
 
     if (gstin && !validateGstin(gstin)) {
-      return json({ error: "Invalid GSTIN format. Example: 22AAAAA0000A1Z5", step: 1 });
+      return json({ error: "This GSTIN is not valid — please check it on your GST registration certificate.", step: 1 });
     }
     if (!businessName) {
       return json({ error: "Business / Trade Name is required — it is printed on every invoice.", step: 1 });
@@ -325,7 +325,7 @@ export default function OnboardingPage() {
                     name="gstin"
                     value={gstin}
                     onChange={(v) => setGstin(v.toUpperCase().slice(0, 15))}
-                    placeholder="22AAAAA0000A1Z5"
+                    placeholder="15-character GSTIN"
                     helpText="Your 15-digit GSTIN. Leave blank if you are not GST registered."
                     error={gstinInvalid ? "This doesn't look like a valid GSTIN — please check it." : undefined}
                     maxLength={15}

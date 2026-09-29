@@ -8,6 +8,7 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { authenticate } from "~/shopify.server";
 import { prisma } from "~/db.server";
+import { getOrderLimit } from "~/lib/plan-limits.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, admin } = await authenticate.admin(request);
@@ -89,19 +90,21 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // ignore if products query fails
   }
 
-  const PLAN_LIMITS: Record<string, number> = {
-    free: 50, starter: 300, growth: 2500, scale: Infinity,
-  };
-  const planLimit = PLAN_LIMITS[shop.currentPlan] ?? 50;
-  const usagePercent = planLimit === Infinity ? 0 : Math.round((shop.ordersThisMonth / planLimit) * 100);
+  // Same limit table the orders/paid webhook enforces — keyed by the real Shopify plan name
+  const planLimit = getOrderLimit(shop.currentPlan);
+  // The counter only resets when the next order arrives, so a count from a previous month is really 0
+  const reset = shop.planResetDate ? new Date(shop.planResetDate) : null;
+  const countIsThisMonth = !!reset && reset.getMonth() === now.getMonth() && reset.getFullYear() === now.getFullYear();
+  const ordersThisMonth = countIsThisMonth ? shop.ordersThisMonth : 0;
+  const usagePercent = planLimit === null ? 0 : Math.round((ordersThisMonth / planLimit) * 100);
 
   return json({
     shop: {
       businessName: shop.businessName,
       gstin: shop.gstin,
       currentPlan: shop.currentPlan,
-      ordersThisMonth: shop.ordersThisMonth,
-      planLimit: planLimit === Infinity ? "Unlimited" : planLimit,
+      ordersThisMonth,
+      planLimit: planLimit === null ? "Unlimited" : planLimit,
       usagePercent,
     },
     stats: { totalInvoices, monthInvoices, pendingEmails },

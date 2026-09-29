@@ -4,3 +4,6 @@ export const PLAN_ADVANCED        = "Advanced - Unlimited Orders";
 export const PLAN_STARTUP_ANNUAL  = "Startup Annual";
 export const PLAN_BUSINESS_ANNUAL = "Business Annual";
 export const PLAN_ADVANCED_ANNUAL = "Advanced Annual";
+
+// Free plan: invoices for this many orders per calendar month
+export const FREE_ORDER_LIMIT = 5;

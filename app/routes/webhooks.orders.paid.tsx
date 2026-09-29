@@ -4,7 +4,7 @@ import { createInvoiceFromOrder } from "~/lib/invoice.server";
 import { generateAndSavePDF } from "~/lib/pdf.server";
 import { prisma } from "~/db.server";
 import { sendInvoiceEmail } from "~/lib/email.server";
-import { isOverLimit, incrementOrderCount } from "~/lib/plan-limits.server";
+import { isOverLimit } from "~/lib/plan-limits.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { payload, shop, topic } = await authenticate.webhook(request);
@@ -29,8 +29,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return new Response("Plan limit reached", { status: 200 });
     }
 
+    // createInvoiceFromOrder counts the order toward the monthly limit (only when a new invoice is created)
     const invoiceId = await createInvoiceFromOrder(shop, order);
-    await incrementOrderCount(shopRecord.id);
 
     // Generate PDF immediately after invoice creation
     await generateAndSavePDF(invoiceId);

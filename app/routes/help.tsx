@@ -489,7 +489,7 @@ export default function HelpPage() {
             <p style={pStyle}>Go to <strong>Billing</strong> in the left menu to view and change your plan.</p>
 
             <DocTable headers={["Plan", "Orders/month", "Key features"]} rows={[
-              ["Free", "50", "Auto invoices, 6 templates, basic GSTR reports, email delivery"],
+              ["Free", "5", "Auto invoices, 6 templates, basic GSTR reports, email delivery"],
               ["Starter — $4.95/mo", "300", "Everything Free + Bulk PDF download, Bulk email"],
               ["Growth — $9.99/mo", "2,500", "Everything Starter + WhatsApp share, Tally export, custom SMTP"],
               ["Scale — $34.99/mo", "Unlimited", "Everything Growth + E-Invoice IRN, multi-location GSTIN"],

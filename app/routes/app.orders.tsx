@@ -121,6 +121,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       startCursor: string | null;
     };
   } = { edges: [], pageInfo: { hasNextPage: false, endCursor: null, hasPreviousPage: false, startCursor: null } };
+  // Shown instead of "No orders in your store yet" when Shopify couldn't be reached
+  let loadError = false;
 
   try {
     const variables: Record<string, unknown> = {
@@ -133,7 +135,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const data = await response.json();
     ordersData = data.data?.orders ?? ordersData;
   } catch (err) {
+    // admin.graphql throws on GraphQL/auth errors (e.g. a rejected access token)
     console.error("[orders loader] GraphQL error:", err);
+    loadError = true;
   }
 
   // Extract numeric IDs to look up in our DB
@@ -191,6 +195,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     paymentFilter,
     dateFrom,
     dateTo,
+    loadError,
   });
 };
 
@@ -785,7 +790,7 @@ function CreditNoteRow({ note, position }: CreditNoteRowProps) {
 
 export default function OrdersPage() {
   const { orders, pageInfo, invoiceMap, creditNotes, searchQuery, tab,
-    fulfillmentFilter, paymentFilter, dateFrom, dateTo } =
+    fulfillmentFilter, paymentFilter, dateFrom, dateTo, loadError } =
     useLoaderData<typeof loader>();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1045,7 +1050,12 @@ export default function OrdersPage() {
                     )}
 
                     {/* Empty state */}
-                    {!isLoading && orders.length === 0 && (
+                    {!isLoading && loadError && (
+                      <Banner tone="critical" title="Couldn't load orders from Shopify">
+                        <p>Please refresh the page. If this keeps happening, contact support.</p>
+                      </Banner>
+                    )}
+                    {!isLoading && !loadError && orders.length === 0 && (
                       <EmptyState heading="No orders found" image="">
                         <p>
                           {searchQuery || hasActiveFilters

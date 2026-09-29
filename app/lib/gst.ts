@@ -128,8 +128,21 @@ export function getIndianStateCode(provinceCode: string, provinceName: string): 
 
 // Validate GSTIN format
 export function validateGstin(gstin: string): boolean {
+  const g = gstin?.toUpperCase() || "";
   const gstinPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-  return gstinPattern.test(gstin?.toUpperCase() || "");
+  return gstinPattern.test(g) && g[14] === gstinCheckChar(g);
+}
+
+// The 15th GSTIN character is a checksum of the first 14 (GSTN's base-36 Luhn variant).
+// Catches typos and made-up numbers like the "22AAAAA0000A1Z5" example placeholder.
+function gstinCheckChar(g: string): string {
+  const chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  let sum = 0;
+  for (let i = 0; i < 14; i++) {
+    const product = chars.indexOf(g[i]) * (i % 2 === 0 ? 1 : 2);
+    sum += Math.floor(product / 36) + (product % 36);
+  }
+  return chars[(36 - (sum % 36)) % 36];
 }
 
 // Get state name from state code
