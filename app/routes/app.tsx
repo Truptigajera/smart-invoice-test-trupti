@@ -8,6 +8,7 @@ import { authenticate } from "../shopify.server";
 import { redirect } from "@remix-run/node";
 import { prisma } from "../db.server";
 import { getOrCreateShop } from "../lib/shop.server";
+import { PlanLimitModal } from "../components/PlanLimitModal";
 import {
   PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
   PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
@@ -92,6 +93,7 @@ export default function App() {
         <Link to="/app/billing">Billing</Link>
       </NavMenu>
       <Outlet />
+      <PlanLimitModal />
     </AppProvider>
   );
 }

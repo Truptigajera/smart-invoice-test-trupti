@@ -4,7 +4,7 @@ import { createInvoiceFromOrder } from "~/lib/invoice.server";
 import { generateAndSavePDF } from "~/lib/pdf.server";
 import { prisma } from "~/db.server";
 import { sendInvoiceEmail } from "~/lib/email.server";
-import { isOverLimit } from "~/lib/plan-limits.server";
+import { isOverLimit, PlanLimitError } from "~/lib/plan-limits.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { payload, shop, topic } = await authenticate.webhook(request);
@@ -73,6 +73,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return new Response("OK", { status: 200 });
   } catch (err) {
+    // Limit reached between the check above and creation — not a failure, so don't make Shopify retry
+    if (err instanceof PlanLimitError) {
+      console.warn(`[webhook orders/paid] Shop ${shop} over plan limit — skipping invoice`);
+      return new Response("Plan limit reached", { status: 200 });
+    }
     console.error("[webhook orders/paid]", err);
     return new Response("Error processing webhook", { status: 500 });
   }

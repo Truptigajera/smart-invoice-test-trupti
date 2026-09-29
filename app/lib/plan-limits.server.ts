@@ -62,3 +62,23 @@ export async function isOverLimit(shopId: string, planKey: string): Promise<bool
 
   return shop.ordersThisMonth >= limit;
 }
+
+// Thrown by createInvoiceFromOrder when the monthly invoice limit is used up.
+// Routes turn it into { limitReached: true } so the UI can show the upgrade popup.
+export class PlanLimitError extends Error {
+  constructor(public limit: number) {
+    super(`You've used all ${limit} free invoices for this month. Upgrade your plan to create unlimited invoices.`);
+    this.name = "PlanLimitError";
+  }
+}
+
+export async function assertCanCreateInvoice(shopId: string, planKey: string): Promise<void> {
+  if (await isOverLimit(shopId, planKey)) {
+    throw new PlanLimitError(getOrderLimit(planKey) ?? 0);
+  }
+}
+
+// JSON body for an action that hit the limit — the UI shows the upgrade popup for `limitReached`
+export function planLimitBody(err: PlanLimitError) {
+  return { error: err.message, limitReached: true as const, limit: err.limit };
+}

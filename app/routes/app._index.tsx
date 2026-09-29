@@ -127,6 +127,18 @@ export default function Dashboard() {
       <TitleBar title="GST Invoice Pro — Dashboard" />
       <BlockStack gap="500">
 
+        {typeof shop.planLimit === "number" && shop.ordersThisMonth >= shop.planLimit && (
+          <Banner
+            title={`Free plan limit reached — ${shop.planLimit} invoices this month`}
+            tone="critical"
+            action={{ content: "Upgrade plan", url: "/app/billing" }}
+          >
+            <Text as="p" variant="bodyMd">
+              New orders won't get GST invoices until you upgrade or the month resets.
+            </Text>
+          </Banner>
+        )}
+
         {/* Welcome + Plan */}
         <Layout>
           <Layout.Section>
@@ -148,7 +160,7 @@ export default function Dashboard() {
                 <Divider />
                 <InlineStack gap="200" align="space-between">
                   <Text as="p" variant="bodyMd">
-                    Orders this month: <strong>{shop.ordersThisMonth}</strong> / {shop.planLimit}
+                    Invoices this month: <strong>{shop.ordersThisMonth}</strong> / {shop.planLimit}
                   </Text>
                   {shop.currentPlan === "free" && (
                     <Link to="/app/billing">

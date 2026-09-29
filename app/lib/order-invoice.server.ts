@@ -146,17 +146,45 @@ export async function ensureInvoiceExists(
   numericOrderId: string
 ): Promise<string | null> {
   const existing = await prisma.invoice.findFirst({
-    where: { shopId, orderId: numericOrderId },
+    where: { shopId, orderId: numericOrderId, invoiceType: { not: "CREDIT_NOTE" } },
     select: { id: true },
   });
   if (existing) return existing.id;
 
-  const gid = `gid://shopify/Order/${numericOrderId}`;
-  const res = await admin.graphql(SINGLE_ORDER_QUERY, { variables: { id: gid } });
-  const orderData = await res.json();
-  const gqlOrder = orderData.data?.order;
+  const gqlOrder = await fetchOrder(admin, numericOrderId);
   if (!gqlOrder) return null;
 
   const webhookShape = buildWebhookShape(numericOrderId, gqlOrder);
   return createInvoiceFromOrder(shopDomain, webhookShape);
+}
+
+// Rebuilds an order's tax invoice from current Shopify data (e.g. after HSN codes were fixed).
+// Keeps the same invoice number, leaves credit notes alone, and doesn't use up plan quota.
+export async function recalculateInvoice(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  admin: any,
+  shopDomain: string,
+  shopId: string,
+  numericOrderId: string
+): Promise<string | null> {
+  // Fetch first: if Shopify is unreachable we must not have deleted the old invoice yet
+  const gqlOrder = await fetchOrder(admin, numericOrderId);
+  if (!gqlOrder) return null;
+
+  const old = await prisma.invoice.findFirst({
+    where: { shopId, orderId: numericOrderId, invoiceType: { not: "CREDIT_NOTE" } },
+    select: { id: true, invoiceNumber: true },
+  });
+  if (old) await prisma.invoice.delete({ where: { id: old.id } });
+
+  const webhookShape = buildWebhookShape(numericOrderId, gqlOrder);
+  return createInvoiceFromOrder(shopDomain, webhookShape, { reuseInvoiceNumber: old?.invoiceNumber });
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function fetchOrder(admin: any, numericOrderId: string) {
+  const gid = `gid://shopify/Order/${numericOrderId}`;
+  const res = await admin.graphql(SINGLE_ORDER_QUERY, { variables: { id: gid } });
+  const orderData = await res.json();
+  return orderData.data?.order ?? null;
 }

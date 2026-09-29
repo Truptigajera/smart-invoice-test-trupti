@@ -23,6 +23,8 @@ import { prisma } from "~/db.server";
 import { generateAndSavePDF, generateCopyPDF, generatePackingSlipPDF } from "~/lib/pdf.server";
 import { sendInvoiceEmail } from "~/lib/email.server";
 import { ensureInvoiceExists } from "~/lib/order-invoice.server";
+import { PlanLimitError, planLimitBody } from "~/lib/plan-limits.server";
+import { usePlanLimitPopup } from "~/components/PlanLimitModal";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
@@ -102,6 +104,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       });
       return json({ success: true, invoiceId, pdfUrl, invoice: inv });
     } catch (err) {
+      if (err instanceof PlanLimitError) return json(planLimitBody(err), { status: 403 });
       return json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
   }
@@ -203,6 +206,7 @@ function DocSection({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     invoice?: any;
   }>();
+  usePlanLimitPopup(fetcher.data);
   const emailFetcher = useFetcher<{ success?: boolean; error?: string; message?: string }>();
 
   const currentPdfUrl = (fetcher.data?.success && fetcher.data.pdfUrl) || initialPdfUrl;

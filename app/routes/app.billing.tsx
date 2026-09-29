@@ -54,7 +54,7 @@ const PLANS: PlanInfo[] = [
     orderLimit: FREE_ORDER_LIMIT,
     highlight: false,
     features: [
-      `${FREE_ORDER_LIMIT} orders / month`,
+      `${FREE_ORDER_LIMIT} invoices / month`,
       "GST Invoice PDF",
       "Email delivery",
       "Template 1",
@@ -70,7 +70,7 @@ const PLANS: PlanInfo[] = [
     orderLimit: 300,
     highlight: false,
     features: [
-      "300 orders / month",
+      "300 invoices / month",
       "Everything in Free",
       "All invoice templates",
       "GST Reports (GSTR-1, 3B)",
@@ -86,7 +86,7 @@ const PLANS: PlanInfo[] = [
     orderLimit: 2500,
     highlight: true,
     features: [
-      "2500 orders / month",
+      "2500 invoices / month",
       "Everything in Startup",
       "E-Invoice (IRN + QR code)",
       "B2B customer GSTIN",
@@ -259,7 +259,7 @@ export default function BillingPage() {
             <BlockStack gap="200">
               <InlineStack align="space-between">
                 <Text as="p" variant="bodySm" tone="subdued">
-                  Orders this month
+                  Invoices this month
                 </Text>
                 <Text as="p" variant="bodySm">
                   {ordersThisMonth}

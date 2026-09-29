@@ -39,7 +39,9 @@ import { authenticate } from "~/shopify.server";
 import { prisma } from "~/db.server";
 import { generateInvoicePDF, generatePackingSlipBuffer } from "~/lib/pdf.server";
 import { sendInvoiceEmail } from "~/lib/email.server";
-import { ensureInvoiceExists } from "~/lib/order-invoice.server";
+import { ensureInvoiceExists, recalculateInvoice } from "~/lib/order-invoice.server";
+import { PlanLimitError, planLimitBody } from "~/lib/plan-limits.server";
+import { usePlanLimitPopup } from "~/components/PlanLimitModal";
 
 const PAGE_SIZE = 25;
 
@@ -232,6 +234,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       if (!invoiceId) return json({ error: "Order not found in Shopify" }, { status: 404 });
       return pdfResponse(invoiceId, copyType);
     } catch (err) {
+      if (err instanceof PlanLimitError) return json(planLimitBody(err), { status: 403 });
       console.error("[orders action] generate-pdf error:", err);
       return json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
@@ -292,6 +295,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const orderIdsStr = formData.get("orderIds") as string;
     const orderIds = orderIdsStr?.split(",").filter(Boolean) ?? [];
     const results: Array<{ pdfBase64: string; filename: string }> = [];
+    let limitError: PlanLimitError | null = null;
     for (const numericOrderId of orderIds) {
       try {
         const invoiceId = await ensureInvoiceExists(admin, shopDomain, shop.id, numericOrderId);
@@ -299,8 +303,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         const buffer = await generateInvoicePDF(invoiceId, "Original");
         const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { invoiceNumber: true } });
         results.push({ pdfBase64: buffer.toString("base64"), filename: `Invoice-${inv?.invoiceNumber || invoiceId}.pdf` });
-      } catch { /* skip individual failures */ }
+      } catch (err) {
+        // Once the free limit is hit, orders without an invoice can't be generated — stop and tell the UI
+        if (err instanceof PlanLimitError) { limitError = err; break; }
+        /* skip other individual failures */
+      }
     }
+    if (limitError) return json({ success: true, bulkPdfs: results, ...planLimitBody(limitError) });
     return json({ success: true, bulkPdfs: results });
   }
 
@@ -337,13 +346,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shopifyOrderGid = formData.get("shopifyOrderGid") as string;
     const numericOrderId = shopifyOrderGid.split("/").pop()!;
     try {
-      // Delete existing invoice (and its line items via cascade)
-      await prisma.invoice.deleteMany({ where: { shopId: shop.id, orderId: numericOrderId } });
-      // Re-create fresh from Shopify
-      const invoiceId = await ensureInvoiceExists(admin, shopDomain, shop.id, numericOrderId);
+      // Rebuild from current Shopify data — keeps the invoice number and any credit notes
+      const invoiceId = await recalculateInvoice(admin, shopDomain, shop.id, numericOrderId);
       if (!invoiceId) return json({ error: "Order not found in Shopify" }, { status: 404 });
       return json({ success: true, message: "Invoice recalculated successfully", invoiceId });
     } catch (err) {
+      if (err instanceof PlanLimitError) return json(planLimitBody(err), { status: 403 });
       console.error("[orders action] recalculate-invoice error:", err);
       return json({ error: err instanceof Error ? err.message : String(err) }, { status: 500 });
     }
@@ -457,6 +465,7 @@ function DownloadModal({
   onClose: () => void;
 }) {
   const fetcher = useFetcher<{ pdfBase64?: string; filename?: string; error?: string }>();
+  usePlanLimitPopup(fetcher.data);
   const [docType, setDocType] = useState(["invoice"]);
   const [copyType, setCopyType] = useState(["Original"]);
 
@@ -544,6 +553,7 @@ function DownloadModal({
 function OrderRow({ order, invoice, position, selected }: OrderRowProps) {
   const sendFetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
   const recalcFetcher = useFetcher<{ success?: boolean; message?: string; error?: string }>();
+  usePlanLimitPopup(recalcFetcher.data);
   const [sendPopoverActive, setSendPopoverActive] = useState(false);
   const [downloadModalOpen, setDownloadModalOpen] = useState(false);
   const [recalcToast, setRecalcToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -723,6 +733,7 @@ interface CreditNoteRowProps {
 
 function CreditNoteRow({ note, position }: CreditNoteRowProps) {
   const fetcher = useFetcher<{ success?: boolean; pdfBase64?: string; filename?: string; error?: string }>();
+  usePlanLimitPopup(fetcher.data);
   const isGenerating = fetcher.state !== "idle";
 
   useEffect(() => {
@@ -806,6 +817,7 @@ export default function OrdersPage() {
   // Bulk selection state
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const bulkFetcher = useFetcher<{ success?: boolean; bulkPdfs?: Array<{ pdfBase64: string; filename: string }>; sent?: number; failed?: number; error?: string }>();
+  usePlanLimitPopup(bulkFetcher.data);
   const [bulkToast, setBulkToast] = useState<{ message: string; error?: boolean } | null>(null);
 
   const selectedTab = parseInt(tab, 10);

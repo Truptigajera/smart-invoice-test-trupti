@@ -7,7 +7,7 @@ import {
   amountToWords,
 } from "~/lib/gst";
 import { generateInvoiceNumber } from "~/lib/invoice-number.server";
-import { incrementOrderCount } from "~/lib/plan-limits.server";
+import { incrementOrderCount, assertCanCreateInvoice } from "~/lib/plan-limits.server";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -62,7 +62,10 @@ export interface ShopifyOrder {
 
 export async function createInvoiceFromOrder(
   shopDomain: string,
-  order: ShopifyOrder
+  order: ShopifyOrder,
+  // Set when rebuilding an invoice that already existed: keeps its number (GST numbering must
+  // stay gap-free) and doesn't count against the monthly limit a second time.
+  opts: { reuseInvoiceNumber?: string } = {}
 ): Promise<string> {
   const shop = await prisma.shop.findUnique({
     where: { shopDomain },
@@ -73,14 +76,22 @@ export async function createInvoiceFromOrder(
 
   const orderId = String(order.id);
 
-  // Check if invoice already exists for this order
+  // Check if a tax invoice already exists for this order (credit notes share the orderId)
   const existing = await prisma.invoice.findFirst({
-    where: { shopId: shop.id, orderId },
+    where: { shopId: shop.id, orderId, invoiceType: { not: "CREDIT_NOTE" } },
   });
   if (existing) return existing.id;
 
-  const invoiceNumber = await generateInvoiceNumber(shop.id);
-  await incrementOrderCount(shop.id);
+  let invoiceNumber: string;
+  if (opts.reuseInvoiceNumber) {
+    invoiceNumber = opts.reuseInvoiceNumber;
+  } else {
+    // Every path that creates a new invoice (webhook, Orders page, Print, bulk) goes through here,
+    // so this is the single place the plan limit is enforced. Throws PlanLimitError.
+    await assertCanCreateInvoice(shop.id, shop.currentPlan);
+    invoiceNumber = await generateInvoiceNumber(shop.id);
+    await incrementOrderCount(shop.id);
+  }
 
   // Determine tax type
   const sellerStateCode = shop.stateCode || getStateCodeFromGstin(shop.gstin || "");
