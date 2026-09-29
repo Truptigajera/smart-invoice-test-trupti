@@ -102,6 +102,30 @@ export function getStateCodeFromGstin(gstin: string): string {
   return gstin?.substring(0, 2) || "";
 }
 
+// Map Shopify province names/codes to Indian state codes
+export function getIndianStateCode(provinceCode: string, provinceName: string): string {
+  const codeMap: Record<string, string> = {
+    AP: "28", AR: "12", AS: "18", BR: "10", CG: "22", GA: "30",
+    GJ: "24", HR: "06", HP: "02", JH: "20", KA: "29", KL: "32",
+    MP: "23", MH: "27", MN: "14", ML: "17", MZ: "15", NL: "13",
+    OD: "21", PB: "03", RJ: "08", SK: "11", TN: "33", TS: "36",
+    TR: "16", UP: "09", UK: "05", WB: "19",
+    CH: "04", DL: "07", JK: "01", LA: "38", PY: "34",
+  };
+
+  // Try province code first (Shopify uses 2-letter codes)
+  const upperCode = provinceCode.toUpperCase().replace("IN-", "");
+  if (codeMap[upperCode]) return codeMap[upperCode];
+
+  // Fallback: try to match by name
+  const nameMap: Record<string, string> = {
+    "maharashtra": "27", "gujarat": "24", "delhi": "07",
+    "karnataka": "29", "tamil nadu": "33", "rajasthan": "08",
+    "uttar pradesh": "09", "west bengal": "19", "telangana": "36",
+  };
+  return nameMap[provinceName.toLowerCase()] || "";
+}
+
 // Validate GSTIN format
 export function validateGstin(gstin: string): boolean {
   const gstinPattern = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;

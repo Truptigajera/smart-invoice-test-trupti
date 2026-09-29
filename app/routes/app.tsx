@@ -5,7 +5,9 @@ import { AppProvider } from "@shopify/shopify-app-remix/react";
 import { NavMenu } from "@shopify/app-bridge-react";
 import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { authenticate } from "../shopify.server";
+import { redirect } from "@remix-run/node";
 import { prisma } from "../db.server";
+import { getOrCreateShop } from "../lib/shop.server";
 import {
   PLAN_STARTUP, PLAN_BUSINESS, PLAN_ADVANCED,
   PLAN_STARTUP_ANNUAL, PLAN_BUSINESS_ANNUAL, PLAN_ADVANCED_ANNUAL,
@@ -15,6 +17,18 @@ export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session, billing } = await authenticate.admin(request);
+
+  // Every /app page needs a finished setup (GSTIN, state, business name) — otherwise
+  // invoices get the wrong tax type. Send unfinished shops to onboarding first.
+  const shop = await getOrCreateShop(session.shop);
+  const url = new URL(request.url);
+  if (!shop.onboardingDone) {
+    if (url.pathname !== "/app/onboarding") {
+      throw redirect(`/app/onboarding?${url.searchParams.toString()}`);
+    }
+    // Skip the billing round-trip to Shopify during onboarding — keeps first load fast
+    return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  }
 
   // Sync active Shopify subscription → shop.currentPlan in DB
   // Runs on every page so plan gates are always up to date
