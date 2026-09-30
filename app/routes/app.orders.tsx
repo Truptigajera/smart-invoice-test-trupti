@@ -75,6 +75,18 @@ const ORDERS_QUERY = `
   }
 `;
 
+// Customer names for a page of orders — kept out of ORDERS_QUERY on purpose (see loader)
+const ORDER_CUSTOMERS_QUERY = `
+  query getOrderCustomers($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Order {
+        id
+        customer { displayName email }
+      }
+    }
+  }
+`;
+
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -140,6 +152,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // admin.graphql throws on GraphQL/auth errors (e.g. a rejected access token)
     console.error("[orders loader] GraphQL error:", err);
     loadError = true;
+  }
+
+  // Customer names are Shopify "protected customer data": if the app isn't approved for it, asking
+  // for them fails the whole query. Fetch them separately so the order list always loads — rows
+  // just fall back to "Guest" when names aren't available.
+  if (ordersData.edges.length > 0) {
+    try {
+      const res = await admin.graphql(ORDER_CUSTOMERS_QUERY, {
+        variables: { ids: ordersData.edges.map((e) => e.node.id) },
+      });
+      const data = await res.json();
+      const byId = new Map<string, { displayName: string; email: string } | null>(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (data.data?.nodes ?? []).filter(Boolean).map((n: any) => [n.id, n.customer ?? null])
+      );
+      ordersData.edges = ordersData.edges.map((e) => ({
+        node: { ...e.node, customer: byId.get(e.node.id) ?? null },
+      }));
+    } catch (err) {
+      console.warn("[orders loader] customer names unavailable:", err);
+    }
   }
 
   // Extract numeric IDs to look up in our DB
@@ -378,6 +411,12 @@ function formatAmount(amount: string, currency: string) {
   }).format(num);
 }
 
+// "PARTIALLY_PAID" → "Partially paid" (Shopify admin shows statuses in sentence case)
+function toSentenceCase(status: string | null | undefined) {
+  const s = (status || "").replace(/_/g, " ").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function paymentStatusTone(
   status: string
 ): "success" | "warning" | "critical" | "info" | undefined {
@@ -589,33 +628,29 @@ function OrderRow({ order, invoice, position, selected }: OrderRowProps) {
 
   return (
     <IndexTable.Row id={order.id} key={order.id} position={position} selected={selected}>
+      {/* Compact rows (bodySm, one line each) to match Shopify admin's own order list */}
       <IndexTable.Cell>
-        <Text as="span" variant="bodyMd" fontWeight="semibold">{order.name}</Text>
+        <Text as="span" variant="bodySm" fontWeight="semibold">{order.name}</Text>
       </IndexTable.Cell>
       <IndexTable.Cell>
         <Text as="span" variant="bodySm" tone="subdued">{formatDate(order.createdAt)}</Text>
       </IndexTable.Cell>
       <IndexTable.Cell>
-        <BlockStack gap="0">
-          <Text as="span" variant="bodyMd">{order.customer?.displayName || "Guest"}</Text>
-          {order.customer?.email && (
-            <Text as="span" variant="bodySm" tone="subdued">{order.customer.email}</Text>
-          )}
-        </BlockStack>
+        <Text as="span" variant="bodySm">{order.customer?.displayName || "Guest"}</Text>
       </IndexTable.Cell>
       <IndexTable.Cell>
-        <Text as="span" variant="bodyMd" fontWeight="semibold">
+        <Text as="span" variant="bodySm">
           {formatAmount(order.totalPriceSet.shopMoney.amount, order.totalPriceSet.shopMoney.currencyCode)}
         </Text>
       </IndexTable.Cell>
       <IndexTable.Cell>
         <Badge tone={paymentStatusTone(order.displayFinancialStatus)}>
-          {order.displayFinancialStatus?.replace(/_/g, " ") || "—"}
+          {toSentenceCase(order.displayFinancialStatus) || "—"}
         </Badge>
       </IndexTable.Cell>
       <IndexTable.Cell>
         <Badge tone={fulfillmentStatusTone(order.displayFulfillmentStatus)}>
-          {order.displayFulfillmentStatus?.replace(/_/g, " ") || "—"}
+          {toSentenceCase(order.displayFulfillmentStatus) || "—"}
         </Badge>
       </IndexTable.Cell>
 
@@ -969,7 +1004,7 @@ export default function OrdersPage() {
           onDismiss={() => setBulkToast(null)}
         />
       )}
-      <Page title="Orders">
+      <Page title="Orders" fullWidth>
         <TitleBar title="Orders" />
         <Layout>
           <Layout.Section>

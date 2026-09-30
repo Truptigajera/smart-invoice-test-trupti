@@ -346,6 +346,12 @@ function formatAmount(amount: string, currency: string) {
   }).format(parseFloat(amount));
 }
 
+// "INVOICE_SENT" → "Invoice sent" (Shopify admin shows statuses in sentence case)
+function toTitleCase(status: string) {
+  const s = (status || "").replace(/_/g, " ").toLowerCase();
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
 function statusTone(status: string): "success" | "warning" | "attention" | undefined {
   switch (status?.toUpperCase()) {
     case "COMPLETED": return "success";
@@ -412,7 +418,7 @@ function EstimateRowActions({
   const numericId = orderId.split("/").pop();
 
   return (
-    <InlineStack gap="150">
+    <InlineStack gap="200" wrap={false} blockAlign="center">
       <Button size="slim" loading={isLoading} onClick={canDownload ? handleDownload : showProPopup}>
         {isLoading ? "Generating…" : "Download"}
       </Button>
@@ -479,8 +485,9 @@ export default function EstimatesPage() {
     const order = edge.node;
     return (
       <IndexTable.Row id={order.id} key={order.id} position={i}>
+        {/* Compact rows (bodySm, one line each) to match Shopify admin's own lists */}
         <IndexTable.Cell>
-          <Text as="span" variant="bodyMd" fontWeight="semibold">
+          <Text as="span" variant="bodySm" fontWeight="semibold">
             {order.name}
           </Text>
         </IndexTable.Cell>
@@ -490,19 +497,12 @@ export default function EstimatesPage() {
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <BlockStack gap="0">
-            <Text as="span" variant="bodyMd">
-              {order.customer?.displayName || "Guest"}
-            </Text>
-            {order.customer?.email && (
-              <Text as="span" variant="bodySm" tone="subdued">
-                {order.customer.email}
-              </Text>
-            )}
-          </BlockStack>
+          <Text as="span" variant="bodySm">
+            {order.customer?.displayName || "Guest"}
+          </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <Text as="span" variant="bodyMd">
+          <Text as="span" variant="bodySm">
             {formatAmount(
               order.totalPriceSet.shopMoney.amount,
               order.totalPriceSet.shopMoney.currencyCode
@@ -511,7 +511,7 @@ export default function EstimatesPage() {
         </IndexTable.Cell>
         <IndexTable.Cell>
           <Badge tone={statusTone(order.status)}>
-            {order.status.replace(/_/g, " ")}
+            {toTitleCase(order.status)}
           </Badge>
         </IndexTable.Cell>
         <IndexTable.Cell>
@@ -528,7 +528,7 @@ export default function EstimatesPage() {
   });
 
   return (
-    <Page title="Estimates">
+    <Page title="Estimates" fullWidth>
       <TitleBar title="Estimates" />
       <Layout>
         <Layout.Section>
