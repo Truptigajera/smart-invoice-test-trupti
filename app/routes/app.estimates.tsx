@@ -25,6 +25,9 @@ import { authenticate } from "~/shopify.server";
 import { prisma } from "~/db.server";
 import { mergeCustomization } from "~/lib/customization.types";
 import type { EstimateData } from "~/components/EstimatePDFTemplate";
+import { canUseFeature } from "~/lib/plan-features";
+import { openUpgradePopup } from "~/components/PlanLimitModal";
+import { STATE_CODES, determineTaxType, getIndianStateCode, getStateCodeFromGstin } from "~/lib/gst";
 
 const PAGE_SIZE = 25;
 
@@ -86,6 +89,7 @@ const DRAFT_ORDER_DETAIL_QUERY = `
         address1
         address2
         city
+        province
         provinceCode
         zip
         phone
@@ -96,6 +100,11 @@ const DRAFT_ORDER_DETAIL_QUERY = `
             title
             variantTitle
             quantity
+            product {
+              metafields(namespace: "gst_invoice", first: 5) {
+                edges { node { key value } }
+              }
+            }
             originalUnitPriceSet { shopMoney { amount } }
             discountedUnitPriceSet { shopMoney { amount } }
             taxLines {
@@ -123,6 +132,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (intent === "generate-estimate-pdf") {
     const draftOrderId = formData.get("draftOrderId") as string;
+
+    // Estimate PDFs are a Pro feature — free stores can browse the list and see what it does
+    const planShop = await prisma.shop.findUnique({
+      where: { shopDomain: session.shop },
+      select: { currentPlan: true },
+    });
+    if (!canUseFeature(planShop?.currentPlan ?? "free", "estimates")) {
+      return json({ error: "Estimate PDFs are available on the Pro plan.", upgradeRequired: true }, { status: 403 });
+    }
 
     const resp = await admin.graphql(DRAFT_ORDER_DETAIL_QUERY, {
       variables: { id: draftOrderId },
@@ -158,6 +176,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         taxRate,
         taxAmount,
         totalAmount: lineTotal,
+        hsnCode:
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          node.product?.metafields?.edges?.find((m: any) => m.node.key === "hsn_code")?.node.value || null,
       };
     });
 
@@ -178,6 +199,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const addrLine = billing?.address1
       ? [billing.address1, billing.address2].filter(Boolean).join(", ")
       : null;
+    // Buyer's GST state decides CGST+SGST vs IGST, and gives the full state name ("GJ" → "Gujarat")
+    const buyerStateCode = getIndianStateCode(billing?.provinceCode || "", billing?.province || "");
+    const sellerStateCode = shop?.stateCode || getStateCodeFromGstin(shop?.gstin || "");
 
     const estimate: EstimateData = {
       estimateNumber: draftOrder.name,
@@ -187,7 +211,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       customerPhone: billing?.phone || draftOrder.customer?.phone || null,
       billingAddress: addrLine,
       billingCity: billing?.city || null,
-      billingState: billing?.provinceCode || null,
+      billingState: STATE_CODES[buyerStateCode] || billing?.province || billing?.provinceCode || null,
+      taxType: determineTaxType(sellerStateCode, buyerStateCode),
       billingPincode: billing?.zip || null,
       lineItems,
       subtotal: parseFloat(draftOrder.subtotalPriceSet.shopMoney.amount),
@@ -227,7 +252,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ── Loader ────────────────────────────────────────────────────────────────────
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
 
   const url = new URL(request.url);
   const searchQuery = url.searchParams.get("q") || "";
@@ -270,6 +295,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     pageInfo: { hasNextPage: false, endCursor: null, hasPreviousPage: false, startCursor: null },
   };
 
+  // Shown instead of "No draft orders found" when Shopify couldn't be read (e.g. missing
+  // read_draft_orders scope) — otherwise merchants think they simply have no drafts
+  let loadError = false;
   try {
     const variables: Record<string, unknown> = { first: PAGE_SIZE, query: gqlQuery || null };
     if (cursor) variables.after = cursor;
@@ -278,10 +306,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const data = await response.json();
     draftOrdersData = data.data?.draftOrders ?? draftOrdersData;
   } catch (err) {
+    // admin.graphql throws on GraphQL/auth errors
     console.error("[estimates loader] GraphQL error:", err);
+    loadError = true;
   }
 
+  const shop = await prisma.shop.findUnique({
+    where: { shopDomain: session.shop },
+    select: { currentPlan: true },
+  });
+
   return json({
+    loadError,
+    canDownload: canUseFeature(shop?.currentPlan ?? "free", "estimates"),
+    storeHandle: session.shop.replace(".myshopify.com", ""),
     draftOrders: draftOrdersData.edges,
     pageInfo: draftOrdersData.pageInfo,
     searchQuery,
@@ -337,12 +375,26 @@ type ActionData = { pdfBase64?: string; filename?: string; error?: string };
 function EstimateRowActions({
   orderId,
   orderName,
+  canDownload,
+  storeHandle,
 }: {
   orderId: string;
   orderName: string;
+  canDownload: boolean;
+  storeHandle: string;
 }) {
   const fetcher = useFetcher<ActionData>();
   const isLoading = fetcher.state !== "idle";
+
+  // Free plan: explain the feature in the shared upgrade popup instead of calling the server
+  const showProPopup = () =>
+    openUpgradePopup({
+      title: "Estimate PDFs are a Pro feature",
+      lines: [
+        `Download ${orderName} as a GST quotation PDF — with HSN codes and CGST/SGST or IGST — to send to your customer.`,
+        "Upgrade to Pro to download estimates for all your draft orders.",
+      ],
+    });
 
   useEffect(() => {
     if (fetcher.data?.pdfBase64 && fetcher.data?.filename) {
@@ -361,11 +413,11 @@ function EstimateRowActions({
 
   return (
     <InlineStack gap="150">
-      <Button size="slim" loading={isLoading} onClick={handleDownload}>
+      <Button size="slim" loading={isLoading} onClick={canDownload ? handleDownload : showProPopup}>
         {isLoading ? "Generating…" : "Download"}
       </Button>
       <Button
-        url={`https://admin.shopify.com/draft_orders/${numericId}`}
+        url={`https://admin.shopify.com/store/${storeHandle}/draft_orders/${numericId}`}
         target="_blank"
         size="slim"
         variant="plain"
@@ -379,7 +431,7 @@ function EstimateRowActions({
 // ── Page component ────────────────────────────────────────────────────────────
 
 export default function EstimatesPage() {
-  const { draftOrders, pageInfo, searchQuery, statusFilter, dateFrom, dateTo } =
+  const { draftOrders, pageInfo, searchQuery, statusFilter, dateFrom, dateTo, loadError, canDownload, storeHandle } =
     useLoaderData<typeof loader>();
 
   const [searchParams, setSearchParams] = useSearchParams();
@@ -469,7 +521,7 @@ export default function EstimatesPage() {
           </Text>
         </IndexTable.Cell>
         <IndexTable.Cell>
-          <EstimateRowActions orderId={order.id} orderName={order.name} />
+          <EstimateRowActions orderId={order.id} orderName={order.name} canDownload={canDownload} storeHandle={storeHandle} />
         </IndexTable.Cell>
       </IndexTable.Row>
     );
@@ -480,9 +532,23 @@ export default function EstimatesPage() {
       <TitleBar title="Estimates" />
       <Layout>
         <Layout.Section>
-          <Banner tone="info">
-            Estimates are draft orders created in your Shopify store. When a draft order is completed and paid, it converts to an invoice automatically.
-          </Banner>
+          {canDownload ? (
+            <Banner tone="info">
+              <Text as="p" variant="bodySm">
+                Your Shopify draft orders — download any of them as a GST quotation PDF. Once a draft order is paid, it gets a GST invoice automatically.
+              </Text>
+            </Banner>
+          ) : (
+            <Banner
+              tone="warning"
+              title="Estimates — Pro feature"
+              action={{ content: "Upgrade to Pro", url: "/app/billing" }}
+            >
+              <Text as="p" variant="bodySm">
+                Browse your Shopify draft orders here. Downloading them as GST quotation PDFs needs the Pro plan.
+              </Text>
+            </Banner>
+          )}
         </Layout.Section>
         <Layout.Section>
           <Card padding="0">
@@ -553,7 +619,14 @@ export default function EstimatesPage() {
             )}
 
             {/* Empty */}
-            {!isLoading && draftOrders.length === 0 && (
+            {!isLoading && loadError && (
+              <Box padding="400">
+                <Banner tone="critical" title="Couldn't load draft orders from Shopify">
+                  <p>Please refresh the page. If this keeps happening, contact support.</p>
+                </Banner>
+              </Box>
+            )}
+            {!isLoading && !loadError && draftOrders.length === 0 && (
               <EmptyState heading="No draft orders found" image="">
                 <p>
                   {hasFilters

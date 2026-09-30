@@ -53,6 +53,7 @@ const PLANS: PlanInfo[] = [
     features: [
       "Unlimited invoices",
       "All invoice & packing slip templates",
+      "Estimates / quotation PDFs from draft orders",
       "GST Reports (GSTR-1, 3B) & Tally export",
       "Auto email, bulk download & bulk email",
       "B2B customers, E-Invoice (IRN), WhatsApp",

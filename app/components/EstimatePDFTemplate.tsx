@@ -15,6 +15,7 @@ export interface EstimateLineItem {
   taxRate: number;        // e.g. 18 for 18%
   taxAmount: number;
   totalAmount: number;
+  hsnCode: string | null; // from the product's gst_invoice.hsn_code metafield
 }
 
 export interface EstimateShop {
@@ -46,6 +47,8 @@ export interface EstimateData {
   total: number;
   note: string | null;
   shop: EstimateShop;
+  // Same-state buyer → CGST + SGST (half each); other state → IGST
+  taxType: "IGST" | "CGST_SGST";
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -272,6 +275,7 @@ export function EstimatePDFTemplate({
                 <Text style={[s.td, s.wNo]}>{idx + 1}</Text>
                 <Text style={[s.td, s.wItem]}>
                   {item.title}{item.variantTitle ? `\n${item.variantTitle}` : ""}
+                  {item.hsnCode ? `\nHSN: ${item.hsnCode}` : ""}
                 </Text>
                 <Text style={[s.td, s.wQty]}>{item.quantity}</Text>
                 <Text style={[s.td, s.wRate]}>{formatRs(item.discountedUnitPrice)}</Text>
@@ -302,9 +306,21 @@ export function EstimatePDFTemplate({
                 <Text style={s.totalValue}>- {formatRs(estimate.totalDiscount)}</Text>
               </View>
             )}
-            {estimate.totalTax > 0 && (
+            {estimate.totalTax > 0 && estimate.taxType === "CGST_SGST" && (
+              <>
+                <View style={s.totalRow}>
+                  <Text style={s.totalLabel}>Est. CGST</Text>
+                  <Text style={s.totalValue}>{formatRs(estimate.totalTax / 2)}</Text>
+                </View>
+                <View style={s.totalRow}>
+                  <Text style={s.totalLabel}>Est. SGST</Text>
+                  <Text style={s.totalValue}>{formatRs(estimate.totalTax / 2)}</Text>
+                </View>
+              </>
+            )}
+            {estimate.totalTax > 0 && estimate.taxType === "IGST" && (
               <View style={s.totalRow}>
-                <Text style={s.totalLabel}>Est. GST</Text>
+                <Text style={s.totalLabel}>Est. IGST</Text>
                 <Text style={s.totalValue}>{formatRs(estimate.totalTax)}</Text>
               </View>
             )}

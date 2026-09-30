@@ -83,11 +83,11 @@ export default function App() {
       <NavMenu>
         <Link to="/app" rel="home">Dashboard</Link>
         <Link to="/app/orders">Orders</Link>
-        <Link to="/app/estimates">Estimates</Link>
         <Link to="/app/invoices">Invoices</Link>
         <Link to="/app/products">Products &amp; HSN</Link>
         <Link to="/app/customers">B2B Customers</Link>
         <Link to="/app/reports">GST Reports</Link>
+        <Link to="/app/estimates">Estimates</Link>
         <Link to="/app/templates">Templates</Link>
         <Link to="/app/settings">Settings</Link>
         <Link to="/app/settings/smtp">Email (SMTP)</Link>
