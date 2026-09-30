@@ -30,8 +30,9 @@ import {
   Popover,
   Modal,
   ChoiceList,
+  Link,
+  IndexTableSelectionType,
 } from "@shopify/polaris";
-import type { IndexTableSelectionType } from "@shopify/polaris";
 import { ArrowDownIcon, PrintIcon, MenuVerticalIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useState, useCallback, useEffect } from "react";
@@ -630,7 +631,11 @@ function OrderRow({ order, invoice, position, selected }: OrderRowProps) {
     <IndexTable.Row id={order.id} key={order.id} position={position} selected={selected}>
       {/* Compact rows (bodySm, one line each) to match Shopify admin's own order list */}
       <IndexTable.Cell>
-        <Text as="span" variant="bodySm" fontWeight="semibold">{order.name}</Text>
+        {/* dataPrimaryLink: clicking anywhere on the row opens the order (like Shopify admin);
+            only the checkbox selects it */}
+        <Link url={`/app/print/${numericId}`} dataPrimaryLink monochrome removeUnderline>
+          <Text as="span" variant="bodySm" fontWeight="semibold">{order.name}</Text>
+        </Link>
       </IndexTable.Cell>
       <IndexTable.Cell>
         <Text as="span" variant="bodySm" tone="subdued">{formatDate(order.createdAt)}</Text>
@@ -849,8 +854,41 @@ export default function OrdersPage() {
   const [dateFromValue, setDateFromValue] = useState(dateFrom);
   const [dateToValue, setDateToValue] = useState(dateTo);
 
-  // Bulk selection state
-  const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
+  // Bulk selection that adds up across pages, like Shopify admin's order list:
+  // select all on page 1 (25) → page 2 select all (50) → click again on page 2 (back to 25).
+  // Keyed by order GID; kept in state so it survives moving between pages.
+  const [selectedGids, setSelectedGids] = useState<Set<string>>(new Set());
+  const selectedOrderIds = Array.from(selectedGids, (gid) => gid.split("/").pop()!);
+  const clearSelection = useCallback(() => setSelectedGids(new Set()), []);
+
+  const handleSelectionChange = useCallback(
+    (selectionType: IndexTableSelectionType, isSelecting: boolean, selection?: string | [number, number]) => {
+      const pageIds = orders.map((e) => e.node.id);
+      setSelectedGids((prev) => {
+        const next = new Set(prev);
+        if (selectionType === IndexTableSelectionType.Single && typeof selection === "string") {
+          if (isSelecting) next.add(selection);
+          else next.delete(selection);
+        } else if (selectionType === IndexTableSelectionType.Multi && Array.isArray(selection)) {
+          // Shift-click: selection is the [start, end] row range on this page
+          const [start, end] = selection;
+          for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+            if (!pageIds[i]) continue;
+            if (isSelecting) next.add(pageIds[i]);
+            else next.delete(pageIds[i]);
+          }
+        } else if (selectionType === IndexTableSelectionType.Page || selectionType === IndexTableSelectionType.All) {
+          // Header checkbox toggles only this page: remove it if it's fully selected, else add it.
+          // (Decided here rather than from isSelecting, because Polaris compares the running
+          // total with this page's size and would otherwise never un-select the page.)
+          const pageFullySelected = pageIds.length > 0 && pageIds.every((id) => next.has(id));
+          pageIds.forEach((id) => (pageFullySelected ? next.delete(id) : next.add(id)));
+        }
+        return next;
+      });
+    },
+    [orders]
+  );
   const bulkFetcher = useFetcher<{ success?: boolean; bulkPdfs?: Array<{ pdfBase64: string; filename: string }>; sent?: number; failed?: number; error?: string }>();
   usePlanLimitPopup(bulkFetcher.data);
   const [bulkToast, setBulkToast] = useState<{ message: string; error?: boolean } | null>(null);
@@ -911,29 +949,6 @@ export default function OrdersPage() {
     setSearchParams(p);
   }, [pageInfo.startCursor, searchParams, setSearchParams]);
 
-  // Bulk selection handlers
-  const handleSelectionChange = useCallback(
-    (selectionType: IndexTableSelectionType, isSelecting: boolean, selection?: string) => {
-      setSelectedItems((prev) => {
-        const next = new Set(prev);
-        if (selectionType === "single" && selection) {
-          // selection is the Shopify GID; use numeric id as key
-          const numId = selection.split("/").pop()!;
-          if (isSelecting) next.add(numId);
-          else next.delete(numId);
-        } else if (selectionType === "page" || selectionType === "all") {
-          if (isSelecting) {
-            orders.forEach((e) => next.add(e.node.id.split("/").pop()!));
-          } else {
-            orders.forEach((e) => next.delete(e.node.id.split("/").pop()!));
-          }
-        }
-        return next;
-      });
-    },
-    [orders]
-  );
-
   // Bulk PDF download: trigger browser download for each base64 PDF
   useEffect(() => {
     const data = bulkFetcher.data;
@@ -943,30 +958,30 @@ export default function OrdersPage() {
         triggerPdfDownload(pdfBase64, filename);
       });
       setBulkToast({ message: `${data.bulkPdfs.length} PDF(s) downloaded` });
-      setSelectedItems(new Set());
+      clearSelection();
     } else if (data.sent !== undefined) {
       setBulkToast({ message: `Emails sent: ${data.sent}${data.failed ? `, failed: ${data.failed}` : ""}`, error: (data.failed ?? 0) > 0 });
-      setSelectedItems(new Set());
+      clearSelection();
     } else if (data.error) {
       setBulkToast({ message: data.error, error: true });
     }
-  }, [bulkFetcher.data]);
+  }, [bulkFetcher.data, clearSelection]);
 
   const handleBulkGeneratePDF = useCallback(() => {
-    if (selectedItems.size === 0) return;
+    if (selectedOrderIds.length === 0) return;
     bulkFetcher.submit(
-      { intent: "bulk-generate-pdf", orderIds: Array.from(selectedItems).join(",") },
+      { intent: "bulk-generate-pdf", orderIds: selectedOrderIds.join(",") },
       { method: "POST" }
     );
-  }, [bulkFetcher, selectedItems]);
+  }, [bulkFetcher, selectedOrderIds]);
 
   const handleBulkSendEmail = useCallback(() => {
-    if (selectedItems.size === 0) return;
+    if (selectedOrderIds.length === 0) return;
     bulkFetcher.submit(
-      { intent: "bulk-send-email", orderIds: Array.from(selectedItems).join(",") },
+      { intent: "bulk-send-email", orderIds: selectedOrderIds.join(",") },
       { method: "POST" }
     );
-  }, [bulkFetcher, selectedItems]);
+  }, [bulkFetcher, selectedOrderIds]);
 
   const tabs = [
     { id: "orders", content: "Orders", panelID: "orders-panel" },
@@ -983,7 +998,7 @@ export default function OrdersPage() {
         order={edge.node}
         invoice={inv}
         position={i}
-        selected={selectedItems.has(numericId)}
+        selected={selectedGids.has(edge.node.id)}
       />
     );
   });
@@ -1117,7 +1132,7 @@ export default function OrdersPage() {
                       <IndexTable
                         resourceName={{ singular: "order", plural: "orders" }}
                         itemCount={orders.length}
-                        selectedItemsCount={selectedItems.size === orders.length ? "All" : selectedItems.size}
+                        selectedItemsCount={selectedGids.size}
                         onSelectionChange={handleSelectionChange}
                         promotedBulkActions={[
                           {
