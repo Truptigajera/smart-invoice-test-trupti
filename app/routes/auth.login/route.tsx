@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { Form, useActionData, useLoaderData } from "@remix-run/react";
 import {
@@ -16,6 +16,7 @@ import polarisStyles from "@shopify/polaris/build/esm/styles.css?url";
 import { login } from "../../shopify.server";
 
 import { loginErrorMessage } from "./error.server";
+import { getEmbeddedRecoveryUrl } from "../../lib/embedded-recovery";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
 
@@ -38,6 +39,25 @@ export default function Auth() {
   const actionData = useActionData<typeof action>();
   const [shop, setShop] = useState("");
   const { errors } = actionData || loaderData;
+
+  // Inside Shopify admin this page should never be needed — try to reload the app for the
+  // store we were just in. Show the form only if that isn't possible.
+  const [recovering, setRecovering] = useState(true);
+  useEffect(() => {
+    const url = getEmbeddedRecoveryUrl();
+    if (url) window.location.replace(url);
+    else setRecovering(false);
+  }, []);
+
+  if (recovering) {
+    return (
+      <PolarisAppProvider i18n={loaderData.polarisTranslations}>
+        <Page>
+          <Text as="p" tone="subdued" alignment="center">Loading…</Text>
+        </Page>
+      </PolarisAppProvider>
+    );
+  }
 
   return (
     <PolarisAppProvider i18n={loaderData.polarisTranslations}>

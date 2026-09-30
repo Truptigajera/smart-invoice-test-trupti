@@ -1,6 +1,6 @@
 import type { MetaFunction } from "@remix-run/node";
 import { useState } from "react";
-import { FREE_ORDER_LIMIT, PLAN_PRO_PRICE } from "~/billing-plans";
+import { DEFAULT_FREE_INVOICE_LIMIT, PLAN_PRO_PRICE } from "~/billing-plans";
 
 export const meta: MetaFunction = () => [
   { title: "Help & Documentation — InvoiceGST" },
@@ -490,7 +490,7 @@ export default function HelpPage() {
             <p style={pStyle}>Go to <strong>Billing</strong> in the left menu to view and change your plan.</p>
 
             <DocTable headers={["Plan", "Invoices/month", "Key features"]} rows={[
-              ["Free", String(FREE_ORDER_LIMIT), "GST invoice PDF, Template 1, GSTIN validation"],
+              ["Free", String(DEFAULT_FREE_INVOICE_LIMIT), "GST invoice PDF, Template 1, GSTIN validation"],
               [`Pro — $${PLAN_PRO_PRICE}/mo`, "Unlimited", "Everything in Free + all templates, GST reports, bulk download & email, WhatsApp, Tally export, E-Invoice IRN, multi-location GSTIN"],
             ]} />
 

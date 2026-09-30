@@ -19,7 +19,7 @@ import { CheckIcon } from "@shopify/polaris-icons";
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useCallback } from "react";
 import { authenticate } from "../shopify.server";
-import { PLAN_PRO, PLAN_PRO_PRICE, FREE_ORDER_LIMIT, BILLING_IS_TEST } from "../billing-plans";
+import { PLAN_PRO, PLAN_PRO_PRICE, BILLING_IS_TEST } from "../billing-plans";
 import prisma from "../db.server";
 
 // ── Plans ────────────────────────────────────────────────────────────────────
@@ -39,7 +39,7 @@ const PLANS: PlanInfo[] = [
     price: "Free",
     subPrice: "",
     features: [
-      `${FREE_ORDER_LIMIT} invoices / month`,
+      "{limit} invoices / month", // {limit} is filled with this store's limit when rendering
       "GST Invoice PDF (CGST / SGST / IGST)",
       "Template 1",
       "GSTIN validation",
@@ -72,7 +72,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const shop = await prisma.shop.findUnique({
     where: { shopDomain: session.shop },
-    select: { ordersThisMonth: true, planResetDate: true },
+    select: { ordersThisMonth: true, planResetDate: true, freeInvoiceLimit: true },
   });
 
   // The counter only resets when the next invoice is created, so a count from a past month is 0
@@ -84,6 +84,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     currentPlanKey: activeSub ? "pro" : "free",
     activeSub: activeSub ? { id: activeSub.id, name: activeSub.name, test: activeSub.test } : null,
     invoicesThisMonth: countIsThisMonth ? shop?.ordersThisMonth ?? 0 : 0,
+    // This store's free limit, editable in the DB (Shop.freeInvoiceLimit)
+    freeLimit: shop?.freeInvoiceLimit ?? 0,
   });
 };
 
@@ -111,12 +113,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
-  const { currentPlanKey, activeSub, invoicesThisMonth } = useLoaderData<typeof loader>();
+  const { currentPlanKey, activeSub, invoicesThisMonth, freeLimit } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
   const busyIntent = fetcher.state !== "idle" ? fetcher.formData?.get("intent") : null;
 
   const isFree = currentPlanKey === "free";
-  const usagePercent = isFree ? Math.min((invoicesThisMonth / FREE_ORDER_LIMIT) * 100, 100) : 0;
+  const usagePercent = isFree ? (freeLimit > 0 ? Math.min((invoicesThisMonth / freeLimit) * 100, 100) : 100) : 0;
 
   const handleSubscribe = useCallback(() => {
     fetcher.submit({ intent: "subscribe" }, { method: "POST" });
@@ -159,7 +161,7 @@ export default function BillingPage() {
                 <Text as="p" variant="bodySm" tone="subdued">Invoices this month</Text>
                 <Text as="p" variant="bodySm">
                   {invoicesThisMonth}
-                  {isFree ? ` / ${FREE_ORDER_LIMIT}` : " (Unlimited)"}
+                  {isFree ? ` / ${freeLimit}` : " (Unlimited)"}
                 </Text>
               </InlineStack>
               {isFree && (
@@ -171,13 +173,13 @@ export default function BillingPage() {
               )}
             </BlockStack>
 
-            {isFree && invoicesThisMonth >= FREE_ORDER_LIMIT ? (
+            {isFree && invoicesThisMonth >= freeLimit ? (
               <Banner tone="critical">
-                You've used all {FREE_ORDER_LIMIT} free invoices this month. Upgrade to Pro to keep creating GST invoices.
+                You've used all {freeLimit} free invoices this month. Upgrade to Pro to keep creating GST invoices.
               </Banner>
             ) : isFree && usagePercent >= 70 ? (
               <Banner tone="warning">
-                You've used {invoicesThisMonth} of {FREE_ORDER_LIMIT} free invoices this month.
+                You've used {invoicesThisMonth} of {freeLimit} free invoices this month.
               </Banner>
             ) : null}
           </BlockStack>
@@ -233,7 +235,7 @@ export default function BillingPage() {
                           <Box>
                             <Icon source={CheckIcon} tone="success" />
                           </Box>
-                          <Text as="p" variant="bodySm">{feature}</Text>
+                          <Text as="p" variant="bodySm">{feature.replace("{limit}", String(freeLimit))}</Text>
                         </InlineStack>
                       ))}
                     </BlockStack>

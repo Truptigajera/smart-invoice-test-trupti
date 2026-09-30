@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { useLoaderData, useFetcher, useSearchParams, useOutlet, useNavigate } from "@remix-run/react";
+import { useLoaderData, useFetcher, useSearchParams, useOutlet, useNavigate, Link } from "@remix-run/react";
 import {
   Page, Layout, Card, BlockStack, InlineStack, Text, Badge,
   Button, IndexTable, TextField, Select,
@@ -285,9 +285,11 @@ export default function InvoicesPage() {
           <span onClick={(e) => e.stopPropagation()}>
             <BlockStack gap="050">
               <Text as="span" variant="bodyMd" fontWeight="semibold">
-                <a href={`/app/invoices/${inv.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+                {/* Remix Link (client-side navigation) — a plain <a href> reloads the iframe without
+                    the embedded params and lands on the login page */}
+                <Link to={`/app/invoices/${inv.id}`} style={{ color: "inherit", textDecoration: "none" }}>
                   {inv.invoiceNumber}
-                </a>
+                </Link>
               </Text>
               <Badge tone={typeMeta.tone}>{typeMeta.label}</Badge>
             </BlockStack>

@@ -91,7 +91,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   // Same limit table the orders/paid webhook enforces — keyed by the real Shopify plan name
-  const planLimit = getOrderLimit(shop.currentPlan);
+  const planLimit = getOrderLimit(shop.currentPlan, shop.freeInvoiceLimit);
   // The counter only resets when the next order arrives, so a count from a previous month is really 0
   const reset = shop.planResetDate ? new Date(shop.planResetDate) : null;
   const countIsThisMonth = !!reset && reset.getMonth() === now.getMonth() && reset.getFullYear() === now.getFullYear();

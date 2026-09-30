@@ -9,6 +9,8 @@ import { redirect } from "@remix-run/node";
 import { prisma } from "../db.server";
 import { getOrCreateShop } from "../lib/shop.server";
 import { PlanLimitModal } from "../components/PlanLimitModal";
+import { rememberEmbeddedContext } from "../lib/embedded-recovery";
+import { useEffect } from "react";
 import { BILLING_IS_TEST } from "../billing-plans";
 
 export const links = () => [{ rel: "stylesheet", href: polarisStyles }];
@@ -69,6 +71,11 @@ function NavLoadingBar() {
 
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>();
+
+  // Lets the login page send the merchant back here if the iframe ever reloads without its params
+  useEffect(() => {
+    rememberEmbeddedContext();
+  }, []);
 
   return (
     <AppProvider isEmbeddedApp apiKey={apiKey}>

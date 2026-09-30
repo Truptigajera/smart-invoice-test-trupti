@@ -50,6 +50,7 @@ model Shop {
   invoiceCounter  Int      @default(1)
   currentPlan     String   @default("free")
   ordersThisMonth Int      @default(0)
+  freeInvoiceLimit Int     @default(5) // Free plan invoices per month for this store — edit in DB to change
   planResetDate   DateTime?
   onboardingDone  Boolean  @default(false)
   createdAt       DateTime @default(now())
