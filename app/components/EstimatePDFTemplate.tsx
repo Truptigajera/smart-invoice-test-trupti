@@ -49,6 +49,9 @@ export interface EstimateData {
   shop: EstimateShop;
   // Same-state buyer → CGST + SGST (half each); other state → IGST
   taxType: "IGST" | "CGST_SGST";
+  // true when prices already include GST (subtotal/total contain the tax)
+  taxesIncluded: boolean;
+  placeOfSupply: string | null; // buyer's state, e.g. "Gujarat (24)"
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
@@ -189,6 +192,13 @@ export function EstimatePDFTemplate({
   const s = makeStyles(fonts.base, fonts.bold, fonts.boldItalic);
 
   const { shop, lineItems } = estimate;
+
+  // Totals in paise so the CGST + SGST halves always add up to the exact GST
+  // (₹30.51 → 15.25 + 15.26, not 15.26 + 15.26)
+  const taxPaise = Math.round(estimate.totalTax * 100);
+  const cgst = Math.floor(taxPaise / 2) / 100;
+  const sgst = (taxPaise - Math.floor(taxPaise / 2)) / 100;
+  const taxableValue = (Math.round(estimate.total * 100) - taxPaise) / 100;
   const showLogo = cx.overview.showLogo && !!shop.logoUrl;
   const showGstin = cx.overview.showSupplierGstin && !!shop.gstin;
 
@@ -250,6 +260,12 @@ export function EstimatePDFTemplate({
                 <Text style={s.infoValue}>{shop.gstin}</Text>
               </View>
             ) : null}
+            {estimate.placeOfSupply ? (
+              <View style={s.infoRow2}>
+                <Text style={s.infoLabel}>Place of Supply</Text>
+                <Text style={s.infoValue}>{estimate.placeOfSupply}</Text>
+              </View>
+            ) : null}
             <View style={s.infoRow2}>
               <Text style={s.infoLabel}>Items</Text>
               <Text style={s.infoValue}>{lineItems.length}</Text>
@@ -297,7 +313,7 @@ export function EstimatePDFTemplate({
         <View style={s.totalsSection}>
           <View style={s.totalsBox}>
             <View style={s.totalRow}>
-              <Text style={s.totalLabel}>Subtotal</Text>
+              <Text style={s.totalLabel}>Subtotal{estimate.taxesIncluded && estimate.totalTax > 0 ? " (incl. GST)" : ""}</Text>
               <Text style={s.totalValue}>{formatRs(estimate.subtotal)}</Text>
             </View>
             {estimate.totalDiscount > 0 && (
@@ -306,15 +322,22 @@ export function EstimatePDFTemplate({
                 <Text style={s.totalValue}>- {formatRs(estimate.totalDiscount)}</Text>
               </View>
             )}
+            {/* GST is charged on the taxable value; works whether prices include GST or not */}
+            {estimate.totalTax > 0 && (
+              <View style={s.totalRow}>
+                <Text style={s.totalLabel}>Taxable Value</Text>
+                <Text style={s.totalValue}>{formatRs(taxableValue)}</Text>
+              </View>
+            )}
             {estimate.totalTax > 0 && estimate.taxType === "CGST_SGST" && (
               <>
                 <View style={s.totalRow}>
                   <Text style={s.totalLabel}>Est. CGST</Text>
-                  <Text style={s.totalValue}>{formatRs(estimate.totalTax / 2)}</Text>
+                  <Text style={s.totalValue}>{formatRs(cgst)}</Text>
                 </View>
                 <View style={s.totalRow}>
                   <Text style={s.totalLabel}>Est. SGST</Text>
-                  <Text style={s.totalValue}>{formatRs(estimate.totalTax / 2)}</Text>
+                  <Text style={s.totalValue}>{formatRs(sgst)}</Text>
                 </View>
               </>
             )}

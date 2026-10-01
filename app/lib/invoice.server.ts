@@ -1,7 +1,7 @@
 import { prisma } from "~/db.server";
 import {
   determineTaxType,
-  calculateLineTax,
+  splitGst,
   getStateCodeFromGstin,
   getIndianStateCode,
   amountToWords,
@@ -43,6 +43,8 @@ export interface ShopifyOrder {
     quantity: number;
     price: string;
     total_discount: string;
+    // Every discount on the line, including its share of order-level discounts (webhook payload)
+    discount_allocations?: Array<{ amount: string }>;
     tax_lines: Array<{ rate: number; price: string; title: string }>;
     properties?: Array<{ name: string; value: string }>;
   }>;
@@ -126,34 +128,33 @@ export async function createInvoiceFromOrder(
       : 0;
     const gstRate = metafieldRate > 0 ? metafieldRate : (shopifyRate > 0 ? shopifyRate : fallback);
 
-    // PRIMARY: back-calculate taxable from Shopify's actual tax amounts.
-    // This is the most reliable method — it correctly handles all discount types
-    // (coupon codes, automatic discounts, manual adjustments) because Shopify always
-    // computes tax on the discounted amount, so taxLines reflect the real taxable base.
+    // Discount on this line: the larger of the line discount and all allocations
+    // (allocations also carry this line's share of order-level discount codes)
+    const allocated = (item.discount_allocations || []).reduce((s, d) => s + parseFloat(d.amount), 0);
+    const itemDiscount = r2(Math.max(parseFloat(item.total_discount) || 0, allocated));
+    // What this line actually costs after discounts — includes GST when prices are GST-inclusive
+    const lineNet = r2(listTotal - itemDiscount);
+
+    // Use Shopify's exact tax amount when it was charged at the same rate we invoice at,
+    // so the invoice matches the order to the paisa. Otherwise (e.g. a product's GST rate set in
+    // the app differs from the store's tax settings) compute GST at our rate from the line amount.
     const shopifyTotalTax = item.tax_lines.reduce((sum, t) => sum + parseFloat(t.price), 0);
-    const shopifyTotalRateDecimal = item.tax_lines.reduce((sum, t) => sum + t.rate, 0);
+    const useShopifyTax = shopifyTotalTax > 0 && Math.abs(shopifyRate - gstRate) < 0.01;
 
     let taxableValue: number;
-    if (shopifyTotalTax > 0 && shopifyTotalRateDecimal > 0) {
-      taxableValue = r2(shopifyTotalTax / shopifyTotalRateDecimal);
+    let lineTax: number;
+    if (taxesIncluded) {
+      // GST is inside lineNet: split it out so taxable + GST = what the customer paid
+      lineTax = useShopifyTax ? r2(shopifyTotalTax) : r2(lineNet - lineNet / (1 + gstRate / 100));
+      taxableValue = r2(lineNet - lineTax);
     } else {
-      // Fallback for 0% GST items or items with no tax lines
-      const rawDiscount = parseFloat(item.total_discount);
-      const lineNetTotal = r2(listTotal - rawDiscount);
-      taxableValue = (gstRate > 0 && taxesIncluded)
-        ? r2(lineNetTotal / (1 + gstRate / 100))
-        : lineNetTotal;
+      // GST is charged on top of lineNet
+      taxableValue = lineNet;
+      lineTax = useShopifyTax ? r2(shopifyTotalTax) : r2(lineNet * gstRate / 100);
     }
 
-    const taxes = calculateLineTax(taxableValue, gstRate, taxType);
-    const totalAmount = r2(taxableValue + taxes.cgstAmount + taxes.sgstAmount + taxes.igstAmount);
-
-    // Discount = use Shopify's total_discount directly when > 0 (exact, no rounding),
-    // otherwise infer from list price vs actual paid amount
-    const rawDiscount = parseFloat(item.total_discount);
-    const itemDiscount = rawDiscount > 0 ? rawDiscount : Math.max(0, taxesIncluded
-      ? r2(listTotal - totalAmount)      // taxes-included: MRP - customer paid
-      : r2(listTotal - taxableValue));   // taxes-excluded: pre-tax list - pre-tax net
+    const taxes = splitGst(lineTax, gstRate, taxType);
+    const totalAmount = r2(taxableValue + lineTax);
 
     totalSubtotal += listTotal;
     totalDiscount += itemDiscount;
@@ -183,16 +184,21 @@ export async function createInvoiceFromOrder(
   // Shipping charges
   let shippingAmount = 0;
   let shippingTax = 0;
+  // shippingAmount is stored as the taxable shipping value, shippingTax as its GST,
+  // so shippingAmount + shippingTax is what the customer paid for shipping.
   for (const sl of order.shipping_lines || []) {
     const slPrice = parseFloat(sl.price);
-    shippingAmount = r2(shippingAmount + slPrice);
     const shopifySlTax = (sl.tax_lines || []).reduce((s, t) => s + parseFloat(t.price), 0);
+    let slTax = 0;
     if (shopifySlTax > 0) {
-      shippingTax = r2(shippingTax + shopifySlTax);
+      slTax = r2(shopifySlTax);
     } else if ((shop.settings as any)?.shippingGstEnabled) {
       const rate = (shop.settings as any)?.shippingGstRate ?? 18;
-      shippingTax = r2(shippingTax + r2(slPrice * rate / 100));
+      slTax = taxesIncluded ? r2(slPrice - slPrice / (1 + rate / 100)) : r2(slPrice * rate / 100);
     }
+    // GST-inclusive shipping already contains slTax — take it out instead of adding it on top
+    shippingAmount = r2(shippingAmount + (taxesIncluded ? slPrice - slTax : slPrice));
+    shippingTax = r2(shippingTax + slTax);
   }
   const totalAmount = r2(lineItemTotal + shippingAmount + shippingTax);
 

@@ -97,6 +97,28 @@ export function calculateLineTax(
   }
 }
 
+// Split an already-known GST amount into CGST/SGST or IGST. Works in paise so the two
+// halves always add back up to the exact amount (₹30.51 → 15.25 + 15.26).
+export function splitGst(
+  taxAmount: number,
+  gstRate: number,
+  taxType: "IGST" | "CGST_SGST"
+): Pick<TaxBreakdown, "cgstRate" | "sgstRate" | "igstRate" | "cgstAmount" | "sgstAmount" | "igstAmount"> {
+  const paise = Math.round(taxAmount * 100);
+  if (taxType === "IGST") {
+    return { cgstRate: 0, sgstRate: 0, igstRate: gstRate, cgstAmount: 0, sgstAmount: 0, igstAmount: paise / 100 };
+  }
+  const half = Math.floor(paise / 2);
+  return {
+    cgstRate: gstRate / 2,
+    sgstRate: gstRate / 2,
+    igstRate: 0,
+    cgstAmount: half / 100,
+    sgstAmount: (paise - half) / 100,
+    igstAmount: 0,
+  };
+}
+
 // Extract state code from GSTIN (first 2 characters)
 export function getStateCodeFromGstin(gstin: string): string {
   return gstin?.substring(0, 2) || "";

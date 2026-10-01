@@ -115,6 +115,7 @@ const DRAFT_ORDER_DETAIL_QUERY = `
           }
         }
       }
+      taxesIncluded
       subtotalPriceSet { shopMoney { amount } }
       totalDiscountsSet { shopMoney { amount } }
       totalTaxSet { shopMoney { amount } }
@@ -149,6 +150,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const draftOrder = gqlData.data?.draftOrder;
     if (!draftOrder) return json({ error: "Draft order not found" }, { status: 404 });
 
+    // Most Indian stores price "GST inclusive": the line price already contains the tax,
+    // so it must not be added again (₹200 incl. 18% GST is ₹200, not ₹230.51).
+    const taxesIncluded = draftOrder.taxesIncluded !== false;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const lineItems = draftOrder.lineItems.edges.map((edge: any) => {
       const node = edge.node;
@@ -165,7 +170,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
       const unitPrice = parseFloat(node.originalUnitPriceSet.shopMoney.amount);
       const discountedUnitPrice = parseFloat(node.discountedUnitPriceSet.shopMoney.amount);
-      const lineTotal = parseFloat(node.discountedTotalSet.shopMoney.amount) + taxAmount;
+      const lineNet = parseFloat(node.discountedTotalSet.shopMoney.amount);
+      const lineTotal = taxesIncluded ? lineNet : lineNet + taxAmount;
 
       return {
         title: node.title,
@@ -219,6 +225,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       totalDiscount: parseFloat(draftOrder.totalDiscountsSet.shopMoney.amount),
       totalTax: parseFloat(draftOrder.totalTaxSet.shopMoney.amount),
       total: parseFloat(draftOrder.totalPriceSet.shopMoney.amount),
+      taxesIncluded,
+      placeOfSupply: STATE_CODES[buyerStateCode] ? `${STATE_CODES[buyerStateCode]} (${buyerStateCode})` : null,
       note: draftOrder.note2 || null,
       shop: {
         businessName: shop?.businessName || null,

@@ -110,6 +110,11 @@ export function buildWebhookShape(numericOrderId: string, gqlOrder: any) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           return (e.node.discountAllocations || []).reduce((sum: number, d: any) => sum + parseFloat(d.allocatedAmountSet.shopMoney.amount), 0).toFixed(2);
         })(),
+        // Includes this line's share of order-level discounts (createInvoiceFromOrder takes the larger)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        discount_allocations: (e.node.discountAllocations || []).map((d: any) => ({
+          amount: d.allocatedAmountSet.shopMoney.amount,
+        })),
         tax_lines: (e.node.taxLines || []).map((t: { rate: number; priceSet: { shopMoney: { amount: string } }; title: string }) => ({
           rate: t.rate,
           price: t.priceSet.shopMoney.amount,

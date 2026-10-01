@@ -133,7 +133,7 @@ export default function Dashboard() {
             tone="critical"
             action={{ content: "Upgrade plan", url: "/app/billing" }}
           >
-            <Text as="p" variant="bodyMd">
+            <Text as="p" variant="bodySm">
               New orders won't get GST invoices until you upgrade or the month resets.
             </Text>
           </Banner>
@@ -146,10 +146,10 @@ export default function Dashboard() {
               <BlockStack gap="300">
                 <InlineStack align="space-between">
                   <BlockStack gap="100">
-                    <Text as="h2" variant="headingLg">
+                    <Text as="h2" variant="headingSm">
                       Welcome back{shop.businessName ? `, ${shop.businessName}` : ""}!
                     </Text>
-                    <Text as="p" variant="bodyMd" tone="subdued">
+                    <Text as="p" variant="bodySm" tone="subdued">
                       GSTIN: {shop.gstin || "Not configured"}
                     </Text>
                   </BlockStack>
@@ -159,7 +159,7 @@ export default function Dashboard() {
                 </InlineStack>
                 <Divider />
                 <InlineStack gap="200" align="space-between">
-                  <Text as="p" variant="bodyMd">
+                  <Text as="p" variant="bodySm">
                     Invoices this month: <strong>{shop.ordersThisMonth}</strong> / {shop.planLimit}
                   </Text>
                   {shop.currentPlan === "free" && (
@@ -178,24 +178,24 @@ export default function Dashboard() {
           <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
             <Card>
               <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">Total Invoices</Text>
-                <Text as="p" variant="heading2xl">{stats.totalInvoices}</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Total Invoices</Text>
+                <Text as="p" variant="headingMd">{stats.totalInvoices}</Text>
               </BlockStack>
             </Card>
           </Grid.Cell>
           <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
             <Card>
               <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">This Month</Text>
-                <Text as="p" variant="heading2xl">{stats.monthInvoices}</Text>
+                <Text as="p" variant="bodySm" tone="subdued">This Month</Text>
+                <Text as="p" variant="headingMd">{stats.monthInvoices}</Text>
               </BlockStack>
             </Card>
           </Grid.Cell>
           <Grid.Cell columnSpan={{ xs: 6, sm: 2, md: 2, lg: 4, xl: 4 }}>
             <Card>
               <BlockStack gap="200">
-                <Text as="p" variant="bodyMd" tone="subdued">Email Pending</Text>
-                <Text as="p" variant="heading2xl">{stats.pendingEmails}</Text>
+                <Text as="p" variant="bodySm" tone="subdued">Email Pending</Text>
+                <Text as="p" variant="headingMd">{stats.pendingEmails}</Text>
               </BlockStack>
             </Card>
           </Grid.Cell>
@@ -209,7 +209,7 @@ export default function Dashboard() {
             action={{ content: "Fix Now", url: "/app/products" }}
           >
             <BlockStack gap="200">
-              <Text as="p" variant="bodyMd">
+              <Text as="p" variant="bodySm">
                 GST invoices may be incorrect without HSN codes. Set them in Products & HSN.
               </Text>
               <BlockStack gap="100">
@@ -232,13 +232,13 @@ export default function Dashboard() {
         <Card>
           <BlockStack gap="400">
             <InlineStack align="space-between">
-              <Text as="h2" variant="headingMd">Recent Invoices</Text>
+              <Text as="h2" variant="headingXs">Recent Invoices</Text>
               <Button url="/app/invoices" variant="plain">View All</Button>
             </InlineStack>
 
             {recentInvoices.length === 0 ? (
               <Box paddingBlock="400">
-                <Text as="p" variant="bodyMd" tone="subdued" alignment="center">
+                <Text as="p" variant="bodySm" tone="subdued" alignment="center">
                   No invoices yet. Invoices will appear here once orders are placed.
                 </Text>
               </Box>
@@ -249,7 +249,7 @@ export default function Dashboard() {
                     <InlineStack align="space-between" blockAlign="center">
                       <BlockStack gap="100">
                         <Link to={`/app/invoices/${inv.id}`}>
-                          <Text as="span" variant="bodyMd" fontWeight="semibold">{inv.invoiceNumber}</Text>
+                          <Text as="span" variant="bodySm" fontWeight="semibold">{inv.invoiceNumber}</Text>
                         </Link>
                         <Text as="p" variant="bodySm" tone="subdued">
                           {inv.buyerName || "Guest"} · {formatDate(inv.createdAt)}
@@ -264,7 +264,7 @@ export default function Dashboard() {
                         ) : (
                           <Badge>Email Pending</Badge>
                         )}
-                        <Text as="p" variant="bodyMd" fontWeight="semibold">
+                        <Text as="p" variant="bodySm" fontWeight="semibold">
                           {formatAmount(inv.totalAmount)}
                         </Text>
                         <Link to={`/app/print/${inv.orderId}`}>
@@ -285,12 +285,12 @@ export default function Dashboard() {
         {/* Quick Actions */}
         <Card>
           <BlockStack gap="300">
-            <Text as="h2" variant="headingMd">Quick Actions</Text>
+            <Text as="h2" variant="headingXs">Quick Actions</Text>
             <InlineStack gap="300">
-              <Button url="/app/invoices" variant="secondary">View All Invoices</Button>
-              <Button url="/app/reports" variant="secondary">Download GST Reports</Button>
-              <Button url="/app/settings" variant="secondary">Configure Settings</Button>
-              <Button url="/app/customize" variant="secondary">Customize Invoice</Button>
+              <Button url="/app/invoices" variant="secondary" size="slim">View All Invoices</Button>
+              <Button url="/app/reports" variant="secondary" size="slim">Download GST Reports</Button>
+              <Button url="/app/settings" variant="secondary" size="slim">Configure Settings</Button>
+              <Button url="/app/customize" variant="secondary" size="slim">Customize Invoice</Button>
             </InlineStack>
           </BlockStack>
         </Card>
