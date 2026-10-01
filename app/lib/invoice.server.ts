@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "~/db.server";
 import {
   determineTaxType,
@@ -67,7 +68,12 @@ export async function createInvoiceFromOrder(
   order: ShopifyOrder,
   // Set when rebuilding an invoice that already existed: keeps its number (GST numbering must
   // stay gap-free) and doesn't count against the monthly limit a second time.
-  opts: { reuseInvoiceNumber?: string } = {}
+  opts: {
+    reuseInvoiceNumber?: string;
+    // Recalculation: keep the original invoice's date, email status and e-invoice details
+    keep?: Partial<Pick<Prisma.InvoiceUncheckedCreateInput,
+      "invoiceDate" | "createdAt" | "emailSentAt" | "irn" | "irnStatus" | "ackNo" | "ackDate" | "qrCode" | "customFieldValues">>;
+  } = {}
 ): Promise<string> {
   const shop = await prisma.shop.findUnique({
     where: { shopDomain },
@@ -225,6 +231,7 @@ export async function createInvoiceFromOrder(
 
   const invoice = await prisma.invoice.create({
     data: {
+      ...opts.keep,
       shopId: shop.id,
       orderId,
       orderName: order.name,

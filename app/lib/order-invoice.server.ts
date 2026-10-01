@@ -178,12 +178,20 @@ export async function recalculateInvoice(
 
   const old = await prisma.invoice.findFirst({
     where: { shopId, orderId: numericOrderId, invoiceType: { not: "CREDIT_NOTE" } },
-    select: { id: true, invoiceNumber: true },
+    select: {
+      id: true, invoiceNumber: true, invoiceDate: true, createdAt: true, emailSentAt: true,
+      irn: true, irnStatus: true, ackNo: true, ackDate: true, qrCode: true, customFieldValues: true,
+    },
   });
   if (old) await prisma.invoice.delete({ where: { id: old.id } });
 
   const webhookShape = buildWebhookShape(numericOrderId, gqlOrder);
-  return createInvoiceFromOrder(shopDomain, webhookShape, { reuseInvoiceNumber: old?.invoiceNumber });
+  // Only the amounts are rebuilt — the invoice keeps its number, date and status
+  const { id: _oldId, invoiceNumber, ...keep } = old ?? { id: "", invoiceNumber: undefined };
+  return createInvoiceFromOrder(shopDomain, webhookShape, {
+    reuseInvoiceNumber: invoiceNumber,
+    keep: old ? keep : undefined,
+  });
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
