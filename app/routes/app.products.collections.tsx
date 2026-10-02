@@ -16,6 +16,7 @@ import {
 import { TitleBar } from "@shopify/app-bridge-react";
 import { useState } from "react";
 import { authenticate } from "~/shopify.server";
+import { isValidGstRate, isValidHsnCode, VALID_GST_RATES } from "~/lib/gst";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +87,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
     if (!hsnCode && !gstRate) {
       return json<ActionData>({ error: "Please enter an HSN code or GST rate before applying." });
+    }
+    // Free-text inputs: block values that would print wrong GST on every invoice
+    if (hsnCode && !isValidHsnCode(hsnCode)) {
+      return json<ActionData>({ error: "HSN code must be 4, 6 or 8 digits." });
+    }
+    if (gstRate && !isValidGstRate(gstRate)) {
+      return json<ActionData>({ error: `GST rate must be one of: ${VALID_GST_RATES.join(", ")}%.` });
     }
 
     // 1. Fetch all products in the collection

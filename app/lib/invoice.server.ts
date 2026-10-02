@@ -6,7 +6,10 @@ import {
   getStateCodeFromGstin,
   getIndianStateCode,
   amountToWords,
+  isValidGstRate,
+  validateGstin,
 } from "~/lib/gst";
+import { canUseFeature } from "~/lib/plan-features";
 import { generateInvoiceNumber } from "~/lib/invoice-number.server";
 import { incrementOrderCount, assertCanCreateInvoice } from "~/lib/plan-limits.server";
 
@@ -127,7 +130,11 @@ export async function createInvoiceFromOrder(
 
     // GST rate priority: per-product metafield > Shopify tax_lines > shop default fallback
     const metafieldRateProp = item.properties?.find((p) => p.name === "metafield_gst_rate");
-    const metafieldRate = metafieldRateProp ? parseFloat(metafieldRateProp.value) : 0;
+    // Ignore rates that aren't real GST slabs (e.g. "6" typed for the CGST half of 12%) —
+    // fall back to the rate Shopify actually charged instead of printing a wrong one
+    const metafieldRate = metafieldRateProp && isValidGstRate(metafieldRateProp.value)
+      ? parseFloat(metafieldRateProp.value)
+      : 0;
     const shopifyRate = item.tax_lines.reduce((sum, t) => sum + t.rate * 100, 0);
     const fallback = (shop.settings as any)?.useDefaultGstRate !== false
       ? (shop.settings?.defaultGstRate ?? 0)
@@ -212,14 +219,26 @@ export async function createInvoiceFromOrder(
   const buyerGstinAttr = order.note_attributes?.find(
     (a) => a.name.toLowerCase().includes("gstin")
   );
-  let buyerGstin = buyerGstinAttr?.value || null;
+  // A GSTIN typed at checkout is only used if it's genuinely valid (format + checksum)
+  const checkoutGstin = (buyerGstinAttr?.value || "").trim().toUpperCase();
+  let buyerGstin = validateGstin(checkoutGstin) ? checkoutGstin : null;
+  let b2bCompanyName: string | null = null;
 
-  if (!buyerGstin && order.email) {
+  // Saved B2B customers are a Pro feature; entries from the public collection link
+  // are skipped until the merchant approves them
+  if (!buyerGstin && order.email && canUseFeature(shop.currentPlan, "b2b-customers")) {
     const b2bCustomer = await prisma.b2BCustomer.findFirst({
-      where: { shopId: shop.id, email: { equals: order.email, mode: "insensitive" } },
-      select: { gstin: true },
+      where: {
+        shopId: shop.id,
+        email: { equals: order.email.trim(), mode: "insensitive" },
+        pendingApproval: { not: true },
+      },
+      select: { gstin: true, companyName: true },
     });
-    if (b2bCustomer) buyerGstin = b2bCustomer.gstin;
+    if (b2bCustomer) {
+      buyerGstin = b2bCustomer.gstin;
+      b2bCompanyName = b2bCustomer.companyName;
+    }
   }
 
   const supplyType = buyerGstin ? "B2B" : "B2C";
@@ -239,7 +258,10 @@ export async function createInvoiceFromOrder(
       invoiceType: "TAX_INVOICE",
       supplyType,
       taxType,
-      buyerName: [order.billing_address?.first_name, order.billing_address?.last_name].filter(Boolean).join(" ") || null,
+      // A B2B invoice must name the registered business (the GSTIN holder), not the person who ordered
+      buyerName: b2bCompanyName
+        || [order.billing_address?.first_name, order.billing_address?.last_name].filter(Boolean).join(" ")
+        || null,
       buyerEmail: order.email || null,
       buyerPhone: order.phone || null,
       buyerAddress: addrSrc?.address1 || null,

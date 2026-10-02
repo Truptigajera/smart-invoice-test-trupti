@@ -124,6 +124,20 @@ export function getStateCodeFromGstin(gstin: string): string {
   return gstin?.substring(0, 2) || "";
 }
 
+// GST rates a product can carry. 5 / 18 / 40 are the main slabs since the Sept 2025 GST
+// rationalisation; 12 and 28 are kept for items still taxed at the old slabs; 0.25 / 1.5 / 3
+// cover rough diamonds, cut diamonds and gold/jewellery.
+export const VALID_GST_RATES = ["0", "0.25", "1.5", "3", "5", "12", "18", "28", "40"];
+
+export function isValidGstRate(rate: string | number): boolean {
+  return VALID_GST_RATES.includes(String(Number(rate)));
+}
+
+// HSN codes are 4, 6 or 8 digits; SAC (services) codes are 6 digits starting with 99
+export function isValidHsnCode(code: string): boolean {
+  return /^(\d{4}|\d{6}|\d{8})$/.test(code.trim());
+}
+
 // Map Shopify province names/codes to Indian state codes
 export function getIndianStateCode(provinceCode: string, provinceName: string): string {
   const codeMap: Record<string, string> = {

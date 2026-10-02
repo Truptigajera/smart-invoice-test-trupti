@@ -1,12 +1,17 @@
 // Public page — no Shopify auth required.
 // Merchants share this URL with B2B buyers so they can submit their GSTIN.
 // URL: /collect-gstin/{shopDomain}  e.g. /collect-gstin/mystore.myshopify.com
+//
+// Because anyone with the link can post here, submissions are stored as "pending approval"
+// and never overwrite an existing customer — otherwise someone could attach a real company's
+// GSTIN to their own email and get B2B invoices (and input tax credit) in that company's name.
 
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { useLoaderData, useFetcher } from "@remix-run/react";
 import { useState } from "react";
 import { prisma } from "~/db.server";
+import { STATE_CODES, validateGstin } from "~/lib/gst";
 
 // ── Loader ────────────────────────────────────────────────────────────────────
 
@@ -28,44 +33,33 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (!shop) return json({ error: "Shop not found" }, { status: 404 });
 
   const formData = await request.formData();
-  const companyName = (formData.get("companyName") as string)?.trim();
-  const gstin = (formData.get("gstin") as string)?.trim().toUpperCase();
-  const email = (formData.get("email") as string)?.trim() || null;
-  const phone = (formData.get("phone") as string)?.trim() || null;
+  const companyName = ((formData.get("companyName") as string) || "").trim().slice(0, 200);
+  const gstin = ((formData.get("gstin") as string) || "").trim().toUpperCase();
+  const email = ((formData.get("email") as string) || "").trim().toLowerCase().slice(0, 200);
+  const phone = ((formData.get("phone") as string) || "").trim().slice(0, 30) || null;
 
-  if (!companyName || companyName.length < 2)
+  if (companyName.length < 2)
     return json({ error: "Company name is required (min 2 characters)" }, { status: 400 });
+  if (!validateGstin(gstin))
+    return json({ error: "This GSTIN is not valid. Please check it on your GST registration certificate." }, { status: 400 });
+  // Email is how the seller matches your orders to this GSTIN
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    return json({ error: "Please enter the email address you use to place orders." }, { status: 400 });
 
-  const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-  if (!gstinRegex.test(gstin))
-    return json({ error: "Invalid GSTIN format. Must be 15 characters (e.g. 27AAPFU0939F1ZV)" }, { status: 400 });
+  // Never overwrite an existing entry from a public form; the seller reviews new ones
+  const existing = await prisma.b2BCustomer.findFirst({ where: { shopId: shop.id, gstin }, select: { id: true } });
+  if (!existing) {
+    await prisma.b2BCustomer.create({
+      data: {
+        shopId: shop.id, companyName, gstin, email, phone,
+        stateCode: gstin.slice(0, 2), state: STATE_CODES[gstin.slice(0, 2)] || null,
+        pendingApproval: true,
+      },
+    });
+  }
 
-  // Upsert by shopId + gstin — if GSTIN already exists, update company name/contact
-  await prisma.b2BCustomer.upsert({
-    where: { shopId_gstin: { shopId: shop.id, gstin } },
-    create: { shopId: shop.id, companyName, gstin, email, phone },
-    update: { companyName, email, phone },
-  });
-
+  // Same response either way, so the form can't be used to probe which GSTINs a store has
   return json({ success: true });
-};
-
-// ── GSTIN state code validator ────────────────────────────────────────────────
-
-const STATE_CODES: Record<string, string> = {
-  "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab",
-  "04": "Chandigarh", "05": "Uttarakhand", "06": "Haryana",
-  "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
-  "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh",
-  "13": "Nagaland", "14": "Manipur", "15": "Mizoram",
-  "16": "Tripura", "17": "Meghalaya", "18": "Assam",
-  "19": "West Bengal", "20": "Jharkhand", "21": "Odisha",
-  "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
-  "26": "Dadra & Nagar Haveli and Daman & Diu",
-  "27": "Maharashtra", "28": "Andhra Pradesh", "29": "Karnataka",
-  "30": "Goa", "31": "Lakshadweep", "32": "Kerala",
-  "33": "Tamil Nadu", "34": "Puducherry", "35": "Andaman & Nicobar Islands",
-  "36": "Telangana", "37": "Andhra Pradesh (new)",
 };
 
 // ── Page component ────────────────────────────────────────────────────────────
@@ -80,19 +74,13 @@ export default function CollectGstinPage() {
   const [gstin, setGstin] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
-  const [gstinHint, setGstinHint] = useState("");
 
   const isLoading = fetcher.state !== "idle";
   const isSuccess = fetcher.data?.success === true;
   const error = fetcher.data?.error;
 
-  const handleGstinChange = (val: string) => {
-    const upper = val.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
-    setGstin(upper);
-    const code = upper.slice(0, 2);
-    const state = STATE_CODES[code];
-    setGstinHint(upper.length >= 2 && state ? `State: ${state}` : "");
-  };
+  const gstinState = gstin.length >= 2 ? STATE_CODES[gstin.slice(0, 2)] : "";
+  const gstinInvalid = gstin.length === 15 && !validateGstin(gstin);
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -125,9 +113,10 @@ export default function CollectGstinPage() {
         {isSuccess ? (
           <div style={{ background: "#fff", borderRadius: 12, padding: 32, boxShadow: "0 2px 12px rgba(0,0,0,0.08)", textAlign: "center" }}>
             <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
-            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#2e7d32", margin: "0 0 8px" }}>GSTIN Submitted!</h2>
+            <h2 style={{ fontSize: 20, fontWeight: 700, color: "#2e7d32", margin: "0 0 8px" }}>GST details received</h2>
             <p style={{ fontSize: 14, color: "#555", margin: 0 }}>
-              Your GST details have been saved. Future invoices from {shop.businessName || "this seller"} will include your GSTIN automatically.
+              {shop.businessName || "The seller"} will review your details. Once approved, your GSTIN will be added to
+              invoices for orders placed with this email address.
             </p>
           </div>
         ) : (
@@ -144,55 +133,62 @@ export default function CollectGstinPage() {
 
             <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
               <div>
-                <label style={labelStyle}>Company / Business Name *</label>
+                <label style={labelStyle} htmlFor="companyName">Registered Business Name *</label>
                 <input
+                  id="companyName"
                   type="text"
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="e.g. ABC Enterprises"
+                  placeholder="As on your GST certificate"
                   required
                   style={inputStyle}
                 />
               </div>
 
               <div>
-                <label style={labelStyle}>GSTIN *</label>
+                <label style={labelStyle} htmlFor="gstin">GSTIN *</label>
                 <input
+                  id="gstin"
                   type="text"
                   value={gstin}
-                  onChange={(e) => handleGstinChange(e.target.value)}
-                  placeholder="e.g. 27AAPFU0939F1ZV"
+                  onChange={(e) => setGstin(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15))}
+                  placeholder="15-character GSTIN"
                   maxLength={15}
                   required
                   style={{
                     ...inputStyle,
                     fontFamily: "monospace",
                     letterSpacing: 1,
-                    borderColor: gstin.length === 15 ? "#4caf50" : undefined,
+                    borderColor: gstinInvalid ? "#f44336" : gstin.length === 15 ? "#4caf50" : undefined,
                   }}
                 />
-                {gstinHint && (
-                  <p style={{ fontSize: 12, color: "#4caf50", margin: "4px 0 0" }}>{gstinHint}</p>
-                )}
-                <p style={{ fontSize: 12, color: "#888", margin: "4px 0 0" }}>
-                  15-character GST Identification Number
-                </p>
+                {gstinInvalid ? (
+                  <p style={{ fontSize: 12, color: "#c62828", margin: "4px 0 0" }}>This GSTIN doesn't look valid — please check it.</p>
+                ) : gstinState ? (
+                  <p style={{ fontSize: 12, color: "#4caf50", margin: "4px 0 0" }}>State: {gstinState}</p>
+                ) : null}
               </div>
 
               <div>
-                <label style={labelStyle}>Email Address (optional)</label>
+                <label style={labelStyle} htmlFor="email">Email used for orders *</label>
                 <input
+                  id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="accounts@company.com"
+                  required
                   style={inputStyle}
                 />
+                <p style={{ fontSize: 12, color: "#888", margin: "4px 0 0" }}>
+                  Your GSTIN is added to invoices for orders placed with this email.
+                </p>
               </div>
 
               <div>
-                <label style={labelStyle}>Phone Number (optional)</label>
+                <label style={labelStyle} htmlFor="phone">Phone Number (optional)</label>
                 <input
+                  id="phone"
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -203,7 +199,7 @@ export default function CollectGstinPage() {
 
               <button
                 type="submit"
-                disabled={isLoading || !companyName || gstin.length !== 15}
+                disabled={isLoading || companyName.trim().length < 2 || gstin.length !== 15 || gstinInvalid || !email}
                 style={{
                   background: isLoading ? "#90caf9" : "#1a73e8",
                   color: "#fff",

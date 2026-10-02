@@ -266,6 +266,9 @@ model B2BCustomer {
   stateCode        String?
   pincode          String?
   notes            String?
+  // true for entries submitted through the public collection link — not used on invoices
+  // until the merchant approves them (anyone with the link can submit)
+  pendingApproval  Boolean?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
