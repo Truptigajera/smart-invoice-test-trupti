@@ -123,7 +123,7 @@ export default function Dashboard() {
     new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(n);
 
   return (
-    <Page>
+    <Page fullWidth>
       <TitleBar title="GST Invoice Pro — Dashboard" />
       <BlockStack gap="500">
 
