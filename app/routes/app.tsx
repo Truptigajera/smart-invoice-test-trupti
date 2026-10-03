@@ -90,10 +90,8 @@ export default function App() {
         <Link to="/app/estimates">Estimates</Link>
         <Link to="/app/templates">Templates</Link>
         <Link to="/app/settings">Settings</Link>
-        <Link to="/app/settings/smtp">Email (SMTP)</Link>
-        <Link to="/app/settings/locations">Locations</Link>
-        <Link to="/app/products/collections">Collection HSN</Link>
         <Link to="/app/billing">Billing</Link>
+        {/* Email (SMTP) is reached from Settings → Email, Collection HSN from Products & HSN */}
       </NavMenu>
       <Outlet />
       <PlanLimitModal />

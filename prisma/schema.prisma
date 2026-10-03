@@ -48,6 +48,7 @@ model Shop {
   signatureUrl    String?
   invoicePrefix   String   @default("INV")
   invoiceCounter  Int      @default(1)
+  invoiceCounterFy String? // Financial year ("26-27") the counter belongs to — it restarts each April when the FY is part of the number
   currentPlan     String   @default("free")
   ordersThisMonth Int      @default(0)
   freeInvoiceLimit Int     @default(5) // Free plan invoices per month for this store — edit in DB to change
@@ -86,6 +87,7 @@ model ShopSettings {
 
   // Invoice Number & Formatting
   invoiceNumberType   String  @default("custom")     // "custom" | "order_number"
+  includeFinancialYear Boolean?                      // true → INV/26-27/0001, numbering restarts every April
   invoiceSuffix       String?
   invoiceStartNumber  Int     @default(1)
   financialYearStart  Int     @default(4)             // 4 = April (Indian FY)

@@ -594,6 +594,7 @@ export default function ProductsPage() {
         title="Products & HSN"
         fullWidth
         secondaryActions={[
+          { content: "Apply by collection", url: "/app/products/collections" },
           { content: exportFetcher.state !== "idle" ? "Preparing CSV…" : "Download CSV", onAction: () => exportFetcher.submit({ intent: "export-csv" }, { method: "POST" }), disabled: exportFetcher.state !== "idle" },
           { content: importFetcher.state !== "idle" ? "Importing…" : "Import CSV", onAction: () => csvInputRef.current?.click(), disabled: importFetcher.state !== "idle" },
         ]}

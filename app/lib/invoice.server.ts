@@ -100,7 +100,7 @@ export async function createInvoiceFromOrder(
     // Every path that creates a new invoice (webhook, Orders page, Print, bulk) goes through here,
     // so this is the single place the plan limit is enforced. Throws PlanLimitError.
     await assertCanCreateInvoice(shop.id, shop.currentPlan);
-    invoiceNumber = await generateInvoiceNumber(shop.id);
+    invoiceNumber = await generateInvoiceNumber(shop.id, order.name);
     await incrementOrderCount(shop.id);
   }
 
