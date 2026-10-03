@@ -26,6 +26,7 @@ import { PackingSlipOrbixTemplate } from "~/components/PackingSlipOrbixTemplate"
 import { CreditNotePDFTemplate } from "~/components/CreditNotePDFTemplate";
 import { prisma } from "~/db.server";
 import { mergeCustomization } from "~/lib/customization.types";
+import { amountToWords } from "~/lib/gst";
 
 // Register NotoSans once at server startup — this is the only file that runs server-side only.
 // NotoSans supports the ₹ glyph (U+20B9); built-in Helvetica/Times/Courier do not.
@@ -249,4 +250,72 @@ export async function generateCopyPDF(
   await writeFile(filepath, buffer);
 
   return `/invoices/${filename}`;
+}
+
+// ── Template preview ─────────────────────────────────────────────────────────
+// Renders any invoice / packing slip template without changing the saved choice, so merchants
+// can see the real PDF before picking one. Uses the store's latest invoice; a store with no
+// invoices yet gets a sample built from its own business details.
+
+export const PACKING_SLIP_TEMPLATE_IDS = ["default", "bold", "oasis", "orbix"];
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function sampleInvoice(shop: any) {
+  const now = new Date();
+  const line = (productName: string, hsnCode: string, quantity: number, unitPrice: number) => {
+    const taxableValue = Math.round(quantity * unitPrice * 100) / 100;
+    const half = Math.round(taxableValue * 0.09 * 100) / 100;
+    return {
+      id: `sample-${hsnCode}`, invoiceId: "sample", productName, variantName: null, hsnCode, sacCode: null,
+      quantity, unit: "NOS", unitPrice, discount: 0, taxableValue,
+      cgstRate: 9, sgstRate: 9, igstRate: 0, cgstAmount: half, sgstAmount: half, igstAmount: 0,
+      totalAmount: Math.round((taxableValue + half * 2) * 100) / 100,
+    };
+  };
+  const lineItems = [line("Cotton T-shirt", "6109", 2, 499), line("Denim Jeans", "6203", 1, 1299)];
+  const taxable = lineItems.reduce((s, l) => s + l.taxableValue, 0);
+  const cgst = lineItems.reduce((s, l) => s + l.cgstAmount, 0);
+  const total = Math.round((taxable + cgst * 2) * 100) / 100;
+  return {
+    id: "sample", shopId: shop.id, orderId: "0", orderName: "#1001", invoiceNumber: `${shop.invoicePrefix || "INV"}-0001`,
+    invoiceDate: now, invoiceType: "TAX_INVOICE", supplyType: "B2C", taxType: "CGST_SGST",
+    buyerName: "Sample Customer", buyerEmail: "customer@example.com", buyerPhone: "+91 98765 43210",
+    buyerAddress: "12 MG Road", buyerCity: shop.city || "Surat", buyerState: shop.state || "Gujarat",
+    buyerStateCode: shop.stateCode || "24", buyerPincode: shop.pincode || "395007", buyerGstin: null,
+    subTotal: taxable, discountAmount: 0, taxableAmount: taxable, cgstAmount: cgst, sgstAmount: cgst, igstAmount: 0,
+    shippingAmount: 0, shippingTax: 0, totalAmount: total, orderNote: null, paymentMethod: "Prepaid", orderTags: null,
+    amountInWords: amountToWords(total), placeOfSupply: shop.stateCode || "24", reverseCharge: false,
+    irn: null, irnStatus: null, ackNo: null, ackDate: null, qrCode: null, customFieldValues: null,
+    pdfUrl: null, pdfGeneratedAt: null, emailSentAt: null, createdAt: now, updatedAt: now,
+    lineItems, shop,
+  };
+}
+
+export async function generateTemplatePreviewPDF(
+  shopId: string,
+  kind: "invoice" | "packing-slip",
+  templateId: string
+): Promise<{ buffer: Buffer; sample: boolean }> {
+  const latest = await prisma.invoice.findFirst({
+    where: { shopId, invoiceType: { not: "CREDIT_NOTE" } },
+    orderBy: { createdAt: "desc" },
+    include: { lineItems: true, shop: { include: { settings: true } } },
+  });
+  const shop = latest?.shop ?? await prisma.shop.findUniqueOrThrow({ where: { id: shopId }, include: { settings: true } });
+  const base = latest ?? sampleInvoice(shop);
+  const invoice = {
+    ...base,
+    shop: { ...shop, logoUrl: resolvePublicImage(shop.logoUrl), signatureUrl: resolvePublicImage(shop.signatureUrl) },
+  };
+
+  // Personalisation is saved per invoice template; packing slips follow the active invoice template's settings
+  const customizationTemplateId = kind === "invoice" ? templateId : shop.settings?.templateId || "template-1";
+  const customization = mergeCustomization(
+    await prisma.templateCustomization.findUnique({ where: { shopId_templateId: { shopId, templateId: customizationTemplateId } } })
+  );
+
+  const Template = kind === "invoice" ? getInvoiceTemplate(templateId) : getPackingSlipTemplate(templateId);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const el = createElement(Template, { invoice: invoice as any, copyType: "Original", customization }) as any;
+  return { buffer: await renderToBuffer(el), sample: !latest };
 }

@@ -5,6 +5,7 @@ import type { TemplateCustomizationSettings } from "~/lib/customization.types";
 import { DEFAULT_CUSTOMIZATION } from "~/lib/customization.types";
 import { getPdfFonts } from "~/lib/pdf-font-utils";
 import { renderCustomFields } from "~/components/pdf-custom-fields";
+import { placeOfSupplyText, reverseChargeText } from "~/lib/pdf-helpers";
 
 // Celestial — deep purple, centered logo area, premium feel
 const C = "#4527A0";
@@ -68,7 +69,8 @@ export function InvoicePDFTemplate4({ invoice, copyType = "Original", customizat
   const showSupplierGstin = cx.overview.showSupplierGstin && !!shop.gstin;
   const showBilling = cx.address.billing.show;
   const showTotalInWords = cx.totals.showTotalInWords && !!invoice.amountInWords;
-  const showSignature = cx.totals.showSignature && !!shop.signatureUrl;
+  // GST invoices need the supplier's signature — show the block even without an uploaded image
+  const showSignature = cx.totals.showSignature;
   const rv = cx.totals.rowVisibility;
   const roundOffAmt = rv.roundOff !== false ? Math.round(invoice.totalAmount) - invoice.totalAmount : 0;
   const showRoundOff = rv.roundOff !== false && Math.abs(roundOffAmt) >= 0.005;
@@ -96,7 +98,7 @@ export function InvoicePDFTemplate4({ invoice, copyType = "Original", customizat
           <View style={s.invoiceBlock}>
             {cx.overview.showTitle ? <Text style={s.invoiceTitle}>{titleText}</Text> : null}
             <Text style={s.invoiceMeta}>{copyType}</Text>
-            {cx.overview.showInvoiceNumber ? <Text style={s.invoiceMeta}>#{invoice.invoiceNumber}</Text> : null}
+            {cx.overview.showInvoiceNumber ? <Text style={s.invoiceMeta}>{invoice.invoiceNumber}</Text> : null}
             {cx.overview.showOrderNumber && (invoice as any).orderName ? <Text style={s.invoiceMeta}>Order No.: {(invoice as any).orderName}</Text> : null}
             {cx.overview.showOrderDate ? <Text style={s.invoiceMeta}>Date: {formatDate(invoice.invoiceDate)}</Text> : null}
             <Text style={s.badge}>{invoice.supplyType} · {isIGST ? igstLabel : `${cgstLabel}+${sgstLabel}`}</Text>
@@ -119,10 +121,10 @@ export function InvoicePDFTemplate4({ invoice, copyType = "Original", customizat
           )}
           <View style={s.colBox}>
             <Text style={s.colTitle}>Invoice Details</Text>
-            {cx.overview.showPlaceOfSupply ? <Text style={s.colDetail}>{cx.overview.placeOfSupplyLabel || "Place of Supply"}: {invoice.placeOfSupply || invoice.buyerState || "-"}</Text> : null}
+            {cx.overview.showPlaceOfSupply ? <Text style={s.colDetail}>{cx.overview.placeOfSupplyLabel || "Place of Supply"}: {placeOfSupplyText(invoice)}</Text> : null}
             <Text style={s.colDetail}>Tax Type: {isIGST ? "IGST (Inter-state)" : "CGST + SGST (Intra-state)"}</Text>
             <Text style={s.colDetail}>Supply: {invoice.supplyType === "B2B" ? "B2B (Registered)" : "B2C (Unregistered)"}</Text>
-            {invoice.reverseCharge ? <Text style={[s.colDetail, { color: "#e53935" }]}>Reverse Charge Applicable</Text> : null}
+            <Text style={s.colDetail}>Reverse Charge: {reverseChargeText(invoice)}</Text>
               {(cx.overview.showPaymentGateway && (invoice as any).paymentMethod) ? <Text style={s.colDetail}>{cx.overview.paymentLabel || "Payment"}: {(invoice as any).paymentMethod}</Text> : null}
               {(cx.overview.showOrderTags && (invoice as any).orderTags) ? <Text style={s.colDetail}>Tags: {(invoice as any).orderTags}</Text> : null}
           </View>
@@ -213,7 +215,7 @@ export function InvoicePDFTemplate4({ invoice, copyType = "Original", customizat
         {showSignature ? (
           <View style={{ alignItems: "flex-end", marginBottom: 20 }}>
             {shop.businessName ? <Text style={{ fontSize: 7.5, color: "#7B6FAA", marginBottom: 4 }}>For {shop.businessName}</Text> : null}
-            <Image src={shop.signatureUrl!} style={{ width: 100, height: 36, objectFit: "contain" }} />
+            {shop.signatureUrl ? <Image src={shop.signatureUrl} style={{ width: 100, height: 36, objectFit: "contain" }} /> : <View style={{ width: 100, height: 32 }} />}
             <Text style={{ fontSize: 7.5, color: "#7B6FAA", marginTop: 3 }}>Authorized Signatory</Text>
           </View>
         ) : null}

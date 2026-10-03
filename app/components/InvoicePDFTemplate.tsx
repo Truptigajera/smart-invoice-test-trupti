@@ -6,6 +6,7 @@ import type { TemplateCustomizationSettings } from "~/lib/customization.types";
 import { DEFAULT_CUSTOMIZATION } from "~/lib/customization.types";
 import { getPdfFonts } from "~/lib/pdf-font-utils";
 import { renderCustomFields } from "~/components/pdf-custom-fields";
+import { placeOfSupplyText, reverseChargeText } from "~/lib/pdf-helpers";
 
 // Types (matching Prisma output with includes)
 interface LineItem {
@@ -260,7 +261,8 @@ export function InvoicePDFTemplate({
   const showSupplierGstin = cx.overview.showSupplierGstin && !!shop.gstin;
   const showBilling = cx.address.billing.show;
   const showTotalInWords = cx.totals.showTotalInWords && !!invoice.amountInWords;
-  const showSignature = cx.totals.showSignature && !!shop.signatureUrl;
+  // GST invoices need the supplier's signature — show the block even without an uploaded image
+  const showSignature = cx.totals.showSignature;
   const rv = cx.totals.rowVisibility;
   const roundOffAmt = rv.roundOff !== false ? Math.round(invoice.totalAmount) - invoice.totalAmount : 0;
   const showRoundOff = rv.roundOff !== false && Math.abs(roundOffAmt) >= 0.005;
@@ -315,7 +317,7 @@ export function InvoicePDFTemplate({
             </Text>
             {cx.overview.showInvoiceNumber && (
               <Text style={styles.invoiceNumber}>
-                {cx.overview.invoiceNumberLabel || "Invoice No."}: #{invoice.invoiceNumber}
+                {cx.overview.invoiceNumberLabel || "Invoice No."}: {invoice.invoiceNumber}
               </Text>
             )}
             {cx.overview.showOrderNumber && invoice.orderName && (
@@ -363,7 +365,7 @@ export function InvoicePDFTemplate({
             <Text style={styles.colTitle}>Invoice Details</Text>
             {cx.overview.showPlaceOfSupply && (
               <Text style={styles.colDetail}>
-                {cx.overview.placeOfSupplyLabel || "Place of Supply"}: {invoice.placeOfSupply || invoice.buyerState || "-"}
+                {cx.overview.placeOfSupplyLabel || "Place of Supply"}: {placeOfSupplyText(invoice)}
               </Text>
             )}
             <Text style={styles.colDetail}>
@@ -372,9 +374,7 @@ export function InvoicePDFTemplate({
             <Text style={styles.colDetail}>
               Supply: {invoice.supplyType === "B2B" ? "B2B (Registered)" : "B2C (Unregistered)"}
             </Text>
-            {invoice.reverseCharge && (
-              <Text style={[styles.colDetail, { color: "#e53935" }]}>⚠ Reverse Charge Applicable</Text>
-            )}
+            <Text style={styles.colDetail}>Reverse Charge: {reverseChargeText(invoice)}</Text>
             {(cx.overview.showPaymentGateway && invoice.paymentMethod) ? (
               <Text style={styles.colDetail}>{cx.overview.paymentLabel || "Payment"}: {invoice.paymentMethod}</Text>
             ) : null}
@@ -560,7 +560,7 @@ export function InvoicePDFTemplate({
         {showSignature && (
           <View style={{ alignItems: "flex-end", marginBottom: 20 }}>
             {shop.businessName ? <Text style={{ fontSize: 7.5, color: "#555", marginBottom: 4 }}>For {shop.businessName}</Text> : null}
-            <Image src={shop.signatureUrl!} style={{ width: 100, height: 36, objectFit: "contain" }} />
+            {shop.signatureUrl ? <Image src={shop.signatureUrl} style={{ width: 100, height: 36, objectFit: "contain" }} /> : <View style={{ width: 100, height: 32 }} />}
             <Text style={{ fontSize: 7.5, color: "#555", marginTop: 3 }}>Authorized Signatory</Text>
           </View>
         )}

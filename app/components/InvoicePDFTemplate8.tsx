@@ -5,6 +5,7 @@ import type { TemplateCustomizationSettings } from "~/lib/customization.types";
 import { DEFAULT_CUSTOMIZATION } from "~/lib/customization.types";
 import { getPdfFonts } from "~/lib/pdf-font-utils";
 import { renderCustomFields } from "~/components/pdf-custom-fields";
+import { placeOfSupplyText, stateCodeText, reverseChargeText } from "~/lib/pdf-helpers";
 
 // Ledger — black/dark borders, formal accounting layout, HSN/SAC tax summary table
 const C = "#1A1A1A";
@@ -361,7 +362,8 @@ export function InvoicePDFTemplate8({
   const showSupplierGstin = cx.overview.showSupplierGstin && !!shop.gstin;
   const showBilling = cx.address.billing.show;
   const showTotalInWords = cx.totals.showTotalInWords && !!invoice.amountInWords;
-  const showSignature = cx.totals.showSignature && !!shop.signatureUrl;
+  // GST invoices need the supplier's signature — show the block even without an uploaded image
+  const showSignature = cx.totals.showSignature;
   const rv = cx.totals.rowVisibility;
   const roundOffAmt = rv.roundOff !== false ? Math.round(invoice.totalAmount) - invoice.totalAmount : 0;
   const showRoundOff = rv.roundOff !== false && Math.abs(roundOffAmt) >= 0.005;
@@ -377,6 +379,17 @@ export function InvoicePDFTemplate8({
   const shippingCgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingSgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingIgst = isIGST ? shippingTaxAmt : 0;
+  // Shipping GST rate shown on the labels (was hard-coded "0%")
+  const shippingRate = shippingAmt > 0 ? Math.round((shippingTaxAmt / shippingAmt) * 100) : 0;
+  const shippingHalfRate = shippingRate / 2;
+  // Footer links as plain text and only when a URL is set — the PDF font has no glyphs for
+  // icon characters, which printed as "f t =÷" even with no links configured
+  const socialLinks = [
+    cx.footer.showWebsite && cx.footer.websiteUrl ? `Web: ${cx.footer.websiteUrl}` : null,
+    cx.footer.showFacebook && cx.footer.facebookUrl ? `Facebook: ${cx.footer.facebookUrl}` : null,
+    cx.footer.showX && cx.footer.xUrl ? `X: ${cx.footer.xUrl}` : null,
+    cx.footer.showInstagram && cx.footer.instagramUrl ? `Instagram: ${cx.footer.instagramUrl}` : null,
+  ].filter((l): l is string => !!l);
   const titleText =
     invoice.invoiceType === "CREDIT_NOTE"
       ? "CREDIT NOTE"
@@ -504,8 +517,8 @@ export function InvoicePDFTemplate8({
           {/* Right column */}
           <View style={s.infoColLast}>
             <View style={s.infoRow}>
-              <Text style={s.infoLabel}>Mode of Transport:</Text>
-              <Text style={s.infoValue}>-</Text>
+              <Text style={s.infoLabel}>Reverse Charge:</Text>
+              <Text style={s.infoValue}>{reverseChargeText(invoice)}</Text>
             </View>
             <View style={s.infoRow}>
               <Text style={s.infoLabel}>Date of Supply:</Text>
@@ -514,13 +527,13 @@ export function InvoicePDFTemplate8({
             {cx.overview.showPlaceOfSupply ? (
               <View style={s.infoRow}>
                 <Text style={s.infoLabel}>{cx.overview.placeOfSupplyLabel || "Place of Supply"}:</Text>
-                <Text style={s.infoValue}>{invoice.placeOfSupply || invoice.buyerState || "-"}</Text>
+                <Text style={s.infoValue}>{placeOfSupplyText(invoice)}</Text>
               </View>
             ) : null}
             {cx.address.billing.showStateCode && invoice.buyerState ? (
               <View style={s.infoRow}>
                 <Text style={s.infoLabel}>State Code:</Text>
-                <Text style={s.infoValue}>{invoice.buyerState}</Text>
+                <Text style={s.infoValue}>{stateCodeText(invoice)}</Text>
               </View>
             ) : null}
             {cx.overview.showPaymentGateway && (invoice as any).paymentMethod ? (
@@ -808,17 +821,17 @@ export function InvoicePDFTemplate8({
                 {!isIGST ? (
                   <>
                     <View style={s.totalRow}>
-                      <Text style={s.totalLabel}>Shipping {cgstLabel} (0%):</Text>
+                      <Text style={s.totalLabel}>Shipping {cgstLabel} ({shippingHalfRate}%):</Text>
                       <Text style={s.totalVal}>{formatRs(shippingCgst)}</Text>
                     </View>
                     <View style={s.totalRow}>
-                      <Text style={s.totalLabel}>Shipping {sgstLabel} (0%):</Text>
+                      <Text style={s.totalLabel}>Shipping {sgstLabel} ({shippingHalfRate}%):</Text>
                       <Text style={s.totalVal}>{formatRs(shippingSgst)}</Text>
                     </View>
                   </>
                 ) : (
                   <View style={s.totalRow}>
-                    <Text style={s.totalLabel}>Shipping {igstLabel} (0%):</Text>
+                    <Text style={s.totalLabel}>Shipping {igstLabel} ({shippingRate}%):</Text>
                     <Text style={s.totalVal}>{formatRs(shippingIgst)}</Text>
                   </View>
                 )}
@@ -848,42 +861,16 @@ export function InvoicePDFTemplate8({
         </View>
 
         {/* ── SOCIAL + POWERED BY + SIGNATURE ── */}
-        {(cx.footer.showWebsite ||
-          cx.footer.showFacebook ||
-          cx.footer.showInstagram ||
-          cx.footer.showX) ? (
+        {socialLinks.length > 0 ? (
           <View style={s.socialRow}>
-            {cx.footer.showWebsite && cx.footer.websiteUrl ? (
-              <Text style={s.socialText}>
-                {cx.footer.websiteLabel || "🌐"} {cx.footer.websiteUrl}
-              </Text>
-            ) : cx.footer.showWebsite ? (
-              <Text style={s.socialText}>🌐</Text>
-            ) : null}
-            {cx.footer.showFacebook && cx.footer.facebookUrl ? (
-              <Text style={s.socialText}>f {cx.footer.facebookUrl}</Text>
-            ) : cx.footer.showFacebook ? (
-              <Text style={s.socialText}>f</Text>
-            ) : null}
-            {cx.footer.showX && cx.footer.xUrl ? (
-              <Text style={s.socialText}>t {cx.footer.xUrl}</Text>
-            ) : cx.footer.showX ? (
-              <Text style={s.socialText}>t</Text>
-            ) : null}
-            {cx.footer.showInstagram && cx.footer.instagramUrl ? (
-              <Text style={s.socialText}>📷 {cx.footer.instagramUrl}</Text>
-            ) : cx.footer.showInstagram ? (
-              <Text style={s.socialText}>📷</Text>
-            ) : null}
+            {socialLinks.map((l) => <Text key={l} style={s.socialText}>{l}</Text>)}
           </View>
         ) : null}
 
-        <Text style={s.poweredBy}>Powered By GST Pro</Text>
-
         {showSignature ? (
           <View style={s.signatureRow}>
-            <Text style={s.signatureLabel}>Signature</Text>
-            <Image src={shop.signatureUrl!} style={s.signatureImg} />
+            <Text style={s.signatureLabel}>Authorised Signatory</Text>
+            {shop.signatureUrl ? <Image src={shop.signatureUrl} style={s.signatureImg} /> : <View style={{ width: 100, height: 32 }} />}
           </View>
         ) : null}
 

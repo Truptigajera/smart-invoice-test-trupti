@@ -5,6 +5,7 @@ import type { TemplateCustomizationSettings } from "~/lib/customization.types";
 import { DEFAULT_CUSTOMIZATION } from "~/lib/customization.types";
 import { getPdfFonts } from "~/lib/pdf-font-utils";
 import { renderCustomFields } from "~/components/pdf-custom-fields";
+import { placeOfSupplyText, stateCodeText, reverseChargeText } from "~/lib/pdf-helpers";
 
 // Harvest — golden/amber headers, shop name large top-left, thank-you footer
 const C = "#C8920A";
@@ -106,7 +107,8 @@ export function InvoicePDFTemplate9({
   const showSupplierGstin = cx.overview.showSupplierGstin && !!shop.gstin;
   const showBilling = cx.address.billing.show;
   const showTotalInWords = cx.totals.showTotalInWords && !!invoice.amountInWords;
-  const showSignature = cx.totals.showSignature && !!shop.signatureUrl;
+  // GST invoices need the supplier's signature — show the block even without an uploaded image
+  const showSignature = cx.totals.showSignature;
   const rv = cx.totals.rowVisibility;
   const roundOffAmt = rv.roundOff !== false ? Math.round(invoice.totalAmount) - invoice.totalAmount : 0;
   const showRoundOff = rv.roundOff !== false && Math.abs(roundOffAmt) >= 0.005;
@@ -122,6 +124,9 @@ export function InvoicePDFTemplate9({
   const shippingCgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingSgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingIgst = isIGST ? shippingTaxAmt : 0;
+  // Shipping GST rate shown on the labels (was hard-coded "0%")
+  const shippingRate = shippingAmt > 0 ? Math.round((shippingTaxAmt / shippingAmt) * 100) : 0;
+  const shippingHalfRate = shippingRate / 2;
   const titleText = invoice.invoiceType === "CREDIT_NOTE" ? "CREDIT NOTE" : (cx.overview.invoiceTitleLabel || "TAX INVOICE");
 
   return (
@@ -180,12 +185,16 @@ export function InvoicePDFTemplate9({
             {cx.overview.showPlaceOfSupply && (
               <View style={s.metaRow}>
                 <Text style={s.metaLabel}>{cx.overview.placeOfSupplyLabel || "Place of Supply"}:</Text>
-                <Text style={s.metaValue}>{invoice.buyerCity ? `${invoice.buyerCity}, ${invoice.buyerState}` : (invoice.placeOfSupply || "-")}</Text>
+                <Text style={s.metaValue}>{placeOfSupplyText(invoice)}</Text>
               </View>
             )}
             <View style={s.metaRow}>
               <Text style={s.metaLabel}>State Code:</Text>
-              <Text style={s.metaValue}>{invoice.placeOfSupply ? `GJ (${invoice.placeOfSupply})` : "-"}</Text>
+              <Text style={s.metaValue}>{stateCodeText(invoice)}</Text>
+            </View>
+            <View style={s.metaRow}>
+              <Text style={s.metaLabel}>Reverse Charge:</Text>
+              <Text style={s.metaValue}>{reverseChargeText(invoice)}</Text>
             </View>
           </View>
           <View style={s.metaRight}>
@@ -354,17 +363,17 @@ export function InvoicePDFTemplate9({
                 {!isIGST ? (
                   <>
                     <View style={s.totalRow}>
-                      <Text style={s.totalLabel}>Shipping {cgstLabel} (0%):</Text>
+                      <Text style={s.totalLabel}>Shipping {cgstLabel} ({shippingHalfRate}%):</Text>
                       <Text style={s.totalVal}>{formatRs(shippingCgst)}</Text>
                     </View>
                     <View style={s.totalRow}>
-                      <Text style={s.totalLabel}>Shipping {sgstLabel} (0%):</Text>
+                      <Text style={s.totalLabel}>Shipping {sgstLabel} ({shippingHalfRate}%):</Text>
                       <Text style={s.totalVal}>{formatRs(shippingSgst)}</Text>
                     </View>
                   </>
                 ) : (
                   <View style={s.totalRow}>
-                    <Text style={s.totalLabel}>Shipping {igstLabel} (0%):</Text>
+                    <Text style={s.totalLabel}>Shipping {igstLabel} ({shippingRate}%):</Text>
                     <Text style={s.totalVal}>{formatRs(shippingIgst)}</Text>
                   </View>
                 )}
@@ -392,8 +401,8 @@ export function InvoicePDFTemplate9({
         {/* Signature */}
         {showSignature && (
           <View style={s.signatureRow}>
-            <Text style={s.signatureLabel}>Signature</Text>
-            <Image src={shop.signatureUrl!} style={s.signatureImg} />
+            <Text style={s.signatureLabel}>Authorised Signatory</Text>
+            {shop.signatureUrl ? <Image src={shop.signatureUrl} style={s.signatureImg} /> : <View style={{ width: 100, height: 32 }} />}
           </View>
         )}
 

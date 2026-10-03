@@ -5,6 +5,7 @@ import type { TemplateCustomizationSettings } from "~/lib/customization.types";
 import { DEFAULT_CUSTOMIZATION } from "~/lib/customization.types";
 import { getPdfFonts } from "~/lib/pdf-font-utils";
 import { renderCustomFields } from "~/components/pdf-custom-fields";
+import { placeOfSupplyText, stateCodeText, reverseChargeText } from "~/lib/pdf-helpers";
 
 // Clarity — orange accent, outer border, shop name large centered, 3-column address, computer-generated footer
 const C = "#E07B30";
@@ -34,7 +35,7 @@ const makeStyles = (base: string, bold: string, boldItalic: string, bodySize = 9
   metaLabel: { fontSize: 7.5, color: "#888", width: 90 },
   metaValue: { fontSize: 7.5, color: "#1A1A1A", flex: 1 },
   // 3-column address table
-  addrTable: { marginHorizontal: 16, marginBottom: 10, border: BORDER },
+  addrTable: { borderBottom: BORDER },
   addrHeaderRow: { flexDirection: "row", borderBottom: BORDER },
   addrHeaderCell: { flex: 1, backgroundColor: "#EEEEEE", padding: 4, borderRight: BORDER },
   addrHeaderCellLast: { flex: 1, backgroundColor: "#EEEEEE", padding: 4 },
@@ -45,7 +46,7 @@ const makeStyles = (base: string, bold: string, boldItalic: string, bodySize = 9
   addrName: { fontSize: 8, fontFamily: bold, marginBottom: 2 },
   addrDetail: { fontSize: 7.5, color: "#555", marginBottom: 1 },
   // Line items table
-  tableWrap: { marginHorizontal: 16, marginBottom: 10, border: BORDER },
+  tableWrap: { marginTop: 10, borderTop: BORDER, borderBottom: BORDER },
   tableHead: { flexDirection: "row", backgroundColor: "#EEEEEE", padding: "4 4" },
   tableRow: { flexDirection: "row", padding: "3 4", borderBottom: BORDER },
   tableRowAlt: { flexDirection: "row", padding: "3 4", backgroundColor: LIGHT, borderBottom: BORDER },
@@ -63,7 +64,7 @@ const makeStyles = (base: string, bold: string, boldItalic: string, bodySize = 9
   wTax2: { width: "14%", textAlign: "right" as const },
   wAmt: { width: "10%", textAlign: "right" as const },
   // Bottom section: terms + totals
-  bottomSection: { flexDirection: "row", marginHorizontal: 16, border: BORDER, marginBottom: 10 },
+  bottomSection: { flexDirection: "row", marginTop: 10, borderTop: BORDER, borderBottom: BORDER },
   termsCol: { flex: 1, padding: 8, borderRight: BORDER },
   termsLabel: { fontSize: 7.5, fontFamily: bold, color: "#333", marginBottom: 4 },
   termsText: { fontSize: 7.5, color: "#555", marginBottom: 3 },
@@ -80,7 +81,7 @@ const makeStyles = (base: string, bold: string, boldItalic: string, bodySize = 9
   grandLabel: { fontSize: 9, fontFamily: bold, color: "#1A1A1A" },
   grandVal: { fontSize: 9, fontFamily: bold, color: "#1A1A1A" },
   // Footer
-  footerArea: { marginHorizontal: 16, paddingVertical: 8, alignItems: "center", borderTop: BORDER },
+  footerArea: { paddingHorizontal: 16, paddingVertical: 8, alignItems: "center" },
   socialRow: { flexDirection: "row", justifyContent: "center", gap: 14, marginBottom: 6 },
   socialText: { fontSize: 7.5, color: "#555" },
   computerGenText: { fontSize: 7.5, color: C, textAlign: "center", marginBottom: 3 },
@@ -125,6 +126,15 @@ export function InvoicePDFTemplate10({
   const shippingCgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingSgst = !isIGST ? shippingTaxAmt / 2 : 0;
   const shippingIgst = isIGST ? shippingTaxAmt : 0;
+  // Shipping GST rate shown on the labels (was hard-coded "0%")
+  const shippingRate = shippingAmt > 0 ? Math.round((shippingTaxAmt / shippingAmt) * 100) : 0;
+  const shippingHalfRate = shippingRate / 2;
+  const socialLinks = [
+    cx.footer.showWebsite && cx.footer.websiteUrl ? `Web: ${cx.footer.websiteUrl}` : null,
+    cx.footer.showFacebook && cx.footer.facebookUrl ? `Facebook: ${cx.footer.facebookUrl}` : null,
+    cx.footer.showX && cx.footer.xUrl ? `X: ${cx.footer.xUrl}` : null,
+    cx.footer.showInstagram && cx.footer.instagramUrl ? `Instagram: ${cx.footer.instagramUrl}` : null,
+  ].filter((l): l is string => !!l);
   const titleText = invoice.invoiceType === "CREDIT_NOTE" ? "Credit Note" : (cx.overview.invoiceTitleLabel || "Tax Invoice");
 
   return (
@@ -186,15 +196,19 @@ export function InvoicePDFTemplate10({
               {cx.overview.showPlaceOfSupply && (
                 <>
                   <View style={s.metaItem}>
-                    <Text style={s.metaLabel}>Place of Supply</Text>
-                    <Text style={s.metaValue}>{invoice.buyerCity ? `${invoice.buyerCity}, ${invoice.buyerState}` : (invoice.placeOfSupply || "-")}</Text>
+                    <Text style={s.metaLabel}>{cx.overview.placeOfSupplyLabel || "Place of Supply"}:</Text>
+                    <Text style={s.metaValue}>{placeOfSupplyText(invoice)}</Text>
                   </View>
                   <View style={s.metaItem}>
                     <Text style={s.metaLabel}>State Code:</Text>
-                    <Text style={s.metaValue}>GJ ({invoice.placeOfSupply || "-"})</Text>
+                    <Text style={s.metaValue}>{stateCodeText(invoice)}</Text>
                   </View>
                 </>
               )}
+              <View style={s.metaItem}>
+                <Text style={s.metaLabel}>Reverse Charge:</Text>
+                <Text style={s.metaValue}>{reverseChargeText(invoice)}</Text>
+              </View>
             </View>
           </View>
 
@@ -219,6 +233,7 @@ export function InvoicePDFTemplate10({
                 {(invoice.buyerCity || invoice.buyerState) && (
                   <Text style={s.addrDetail}>{[invoice.buyerCity, invoice.buyerState, invoice.buyerPincode].filter(Boolean).join(", ")}</Text>
                 )}
+                {cx.address.billing.showPhone && invoice.buyerPhone && <Text style={s.addrDetail}>Ph: {invoice.buyerPhone}</Text>}
                 {cx.address.billing.showEmail && invoice.buyerEmail && <Text style={[s.addrDetail, { color: "#1565C0" }]}>{invoice.buyerEmail}</Text>}
                 {cx.address.billing.showGstin && invoice.buyerGstin && <Text style={s.addrDetail}>GSTIN: {invoice.buyerGstin}</Text>}
               </View>
@@ -229,6 +244,7 @@ export function InvoicePDFTemplate10({
                 {(invoice.buyerCity || invoice.buyerState) && (
                   <Text style={s.addrDetail}>{[invoice.buyerCity, invoice.buyerState, invoice.buyerPincode].filter(Boolean).join(", ")}</Text>
                 )}
+                {cx.address.billing.showPhone && invoice.buyerPhone && <Text style={s.addrDetail}>Ph: {invoice.buyerPhone}</Text>}
                 {cx.address.billing.showEmail && invoice.buyerEmail && <Text style={[s.addrDetail, { color: "#1565C0" }]}>{invoice.buyerEmail}</Text>}
                 {cx.address.billing.showGstin && invoice.buyerGstin && <Text style={s.addrDetail}>GSTIN: {invoice.buyerGstin}</Text>}
               </View>
@@ -331,7 +347,10 @@ export function InvoicePDFTemplate10({
               )}
               <Text style={s.eoeText}>E. &amp; O.E</Text>
               {cx.notes.showOrderNotes && invoice.orderNote && (
-                <Text style={s.noteText}>{invoice.orderNote}</Text>
+                <Text style={s.noteText}>
+                  <Text style={{ fontFamily: fonts.bold }}>{cx.notes.orderNoteTitle || "Order Note"}: </Text>
+                  {invoice.orderNote}
+                </Text>
               )}
             </View>
             <View style={s.totalsCol}>
@@ -369,17 +388,17 @@ export function InvoicePDFTemplate10({
                   {!isIGST ? (
                     <>
                       <View style={s.totalRow}>
-                        <Text style={s.totalLabel}>Shipping {cgstLabel} (0%):</Text>
+                        <Text style={s.totalLabel}>Shipping {cgstLabel} ({shippingHalfRate}%):</Text>
                         <Text style={s.totalVal}>{formatRs(shippingCgst)}</Text>
                       </View>
                       <View style={s.totalRow}>
-                        <Text style={s.totalLabel}>Shipping {sgstLabel} (0%):</Text>
+                        <Text style={s.totalLabel}>Shipping {sgstLabel} ({shippingHalfRate}%):</Text>
                         <Text style={s.totalVal}>{formatRs(shippingSgst)}</Text>
                       </View>
                     </>
                   ) : (
                     <View style={s.totalRow}>
-                      <Text style={s.totalLabel}>Shipping {igstLabel} (0%):</Text>
+                      <Text style={s.totalLabel}>Shipping {igstLabel} ({shippingRate}%):</Text>
                       <Text style={s.totalVal}>{formatRs(shippingIgst)}</Text>
                     </View>
                   )}
@@ -406,16 +425,24 @@ export function InvoicePDFTemplate10({
 
           {/* Footer */}
           <View style={s.footerArea}>
-            {(cx.footer.showWebsite || cx.footer.showFacebook || cx.footer.showX || cx.footer.showInstagram) && (
+            {/* Links as text, and only when a URL is set — the PDF font has no glyphs for icon
+                characters, which printed as "f t =÷" even with no links configured */}
+            {socialLinks.length > 0 && (
               <View style={s.socialRow}>
-                {cx.footer.showWebsite && <Text style={s.socialText}>🌐</Text>}
-                {cx.footer.showFacebook && <Text style={s.socialText}>f</Text>}
-                {cx.footer.showX && <Text style={s.socialText}>t</Text>}
-                {cx.footer.showInstagram && <Text style={s.socialText}>📷</Text>}
+                {socialLinks.map((l) => <Text key={l} style={s.socialText}>{l}</Text>)}
               </View>
             )}
-            <Text style={s.computerGenText}>This is computer generated invoice and hence no signature is required</Text>
-            <Text style={s.poweredBy}>Powered By GST Pro</Text>
+            {/* Signature block like every other design: the uploaded image, or space to sign by hand */}
+            {cx.totals.showSignature && (
+              <View style={{ alignSelf: "flex-end", alignItems: "flex-end", marginBottom: 6 }}>
+                <Text style={{ fontSize: 7.5, color: "#555" }}>For {shop.businessName || ""}</Text>
+                {shop.signatureUrl
+                  ? <Image src={shop.signatureUrl} style={{ width: 100, height: 36, objectFit: "contain" }} />
+                  : <View style={{ width: 100, height: 32 }} />}
+                <Text style={{ fontSize: 7.5, color: "#555", marginTop: 2 }}>Authorised Signatory</Text>
+              </View>
+            )}
+            <Text style={s.computerGenText}>This is a computer-generated invoice.</Text>
           </View>
 
         </View>
