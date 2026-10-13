@@ -11,10 +11,15 @@ import prisma from "./db.server";
 import { PLAN_PRO, PLAN_PRO_PRICE } from "./billing-plans";
 export { PLAN_PRO } from "./billing-plans";
 
+// Admin API version used for every API call — keep in sync with [webhooks] api_version in shopify.app.toml.
+// The installed @shopify/shopify-api only lists versions up to July26 in its ApiVersion enum, so the
+// newer version is pinned here as a string (the library accepts any valid version).
+const ADMIN_API_VERSION = "2026-10" as ApiVersion;
+
 const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
-  apiVersion: ApiVersion.April26,
+  apiVersion: ADMIN_API_VERSION,
   scopes: process.env.SCOPES?.split(","),
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
@@ -71,7 +76,7 @@ prisma.session
   .catch((err) => console.error("[auth] Legacy session cleanup failed:", err));
 
 export default shopify;
-export const apiVersion = ApiVersion.April26;
+export const apiVersion = ADMIN_API_VERSION;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
 export const unauthenticated = shopify.unauthenticated;
